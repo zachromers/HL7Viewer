@@ -50,7 +50,7 @@ const HL7Parser = (function() {
    * Check if the content appears to be HL7 formatted
    */
   function isHL7Content(content) {
-    const lines = content.split(/\r?\n/).filter(line => line.trim());
+    const lines = content.split(/\r\n|\n|\r/).filter(line => line.trim());
     if (lines.length === 0) return false;
 
     // Check if any line starts with a known HL7 segment
@@ -114,7 +114,7 @@ const HL7Parser = (function() {
     tooltip.style.display = 'none';
 
     // Split content into lines and group by messages
-    const lines = content.split(/\r?\n/);
+    const lines = content.split(/\r\n|\n|\r/);
     const messageGroups = groupLinesByMessage(lines);
 
     // State for pagination
@@ -353,7 +353,7 @@ const HL7Parser = (function() {
     container.className = 'hl7-container hl7-collapsed-view';
 
     // Split content into lines and parse into messages
-    const lines = content.split(/\r?\n/);
+    const lines = content.split(/\r\n|\n|\r/);
     const messages = parseIntoMessages(lines);
 
     // State for pagination
