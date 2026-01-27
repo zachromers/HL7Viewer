@@ -1,0 +1,451 @@
+/* HL7 Viewer - Main Layout Styles */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  background-color: #1e1e1e;
+  color: #d4d4d4;
+  min-height: 100vh;
+}
+
+.app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ========================================
+   MENU BAR
+   ======================================== */
+
+.menu-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.menu-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #4fc1ff;
+  white-space: nowrap;
+}
+
+.menu-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.control-label {
+  font-size: 13px;
+  color: #999999;
+  white-space: nowrap;
+}
+
+/* View Mode Toggle */
+.view-toggle {
+  display: flex;
+  background-color: #333333;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.toggle-option {
+  cursor: pointer;
+}
+
+.toggle-option input {
+  display: none;
+}
+
+.toggle-btn {
+  display: block;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #999999;
+  transition: all 0.2s ease;
+}
+
+.toggle-option input:checked + .toggle-btn {
+  background-color: #0e639c;
+  color: #ffffff;
+}
+
+.toggle-option:hover .toggle-btn {
+  background-color: #3c3c3c;
+}
+
+.toggle-option input:checked + .toggle-btn:hover {
+  background-color: #1177bb;
+}
+
+/* Checkbox Control */
+.checkbox-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.checkbox-control input {
+  width: 16px;
+  height: 16px;
+  accent-color: #0e639c;
+}
+
+.checkbox-label {
+  font-size: 13px;
+  color: #cccccc;
+}
+
+/* Select Control */
+.select-control {
+  padding: 5px 10px;
+  font-size: 13px;
+  background-color: #333333;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+}
+
+.select-control:hover {
+  border-color: #666666;
+}
+
+.select-control:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+/* Clear Button */
+.clear-btn {
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: #4d4d4d;
+  border: none;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.clear-btn:hover {
+  background-color: #5a5a5a;
+}
+
+/* ========================================
+   MAIN CONTENT
+   ======================================== */
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ========================================
+   INPUT AREA
+   ======================================== */
+
+.input-area {
+  padding: 20px;
+  background-color: #1e1e1e;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.input-area.hidden {
+  display: none;
+}
+
+/* Drop Zone */
+.drop-zone {
+  border: 2px dashed #454545;
+  border-radius: 8px;
+  padding: 40px 20px;
+  text-align: center;
+  transition: all 0.2s ease;
+  margin-bottom: 16px;
+}
+
+.drop-zone.drag-over {
+  border-color: #0e639c;
+  background-color: rgba(14, 99, 156, 0.1);
+}
+
+.drop-zone-content {
+  pointer-events: none;
+}
+
+.drop-zone.drag-over .drop-zone-content {
+  pointer-events: none;
+}
+
+.drop-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.drop-text {
+  font-size: 16px;
+  color: #cccccc;
+  margin-bottom: 8px;
+}
+
+.drop-subtext {
+  font-size: 14px;
+  color: #666666;
+  margin-bottom: 12px;
+}
+
+.file-input-label {
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.file-input-label input {
+  display: none;
+}
+
+.browse-btn {
+  display: inline-block;
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: #0e639c;
+  border-radius: 4px;
+  color: #ffffff;
+  transition: background-color 0.2s ease;
+}
+
+.browse-btn:hover {
+  background-color: #1177bb;
+}
+
+/* Text Input Area */
+.text-input-area {
+  display: flex;
+  gap: 12px;
+}
+
+#textInput {
+  flex: 1;
+  height: 80px;
+  padding: 12px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  background-color: #2d2d2d;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  color: #d4d4d4;
+  resize: vertical;
+}
+
+#textInput:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+#textInput::placeholder {
+  color: #666666;
+}
+
+.load-btn {
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: #0e639c;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+}
+
+.load-btn:hover {
+  background-color: #1177bb;
+}
+
+.load-btn:active {
+  background-color: #0d5a8c;
+}
+
+/* ========================================
+   VIEWER AREA
+   ======================================== */
+
+.viewer-area {
+  flex: 1;
+  overflow: auto;
+}
+
+.welcome-message {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666666;
+  font-size: 16px;
+}
+
+/* Override container styles for embedded use */
+.viewer-area .hl7-container {
+  min-height: auto;
+}
+
+/* ========================================
+   LIGHT THEME SUPPORT
+   ======================================== */
+
+@media (prefers-color-scheme: light) {
+  body {
+    background-color: #ffffff;
+    color: #333333;
+  }
+
+  .menu-bar {
+    background-color: #f3f3f3;
+    border-bottom-color: #e0e0e0;
+  }
+
+  .app-title {
+    color: #0066cc;
+  }
+
+  .control-label {
+    color: #666666;
+  }
+
+  .view-toggle {
+    background-color: #e0e0e0;
+  }
+
+  .toggle-btn {
+    color: #666666;
+  }
+
+  .toggle-option:hover .toggle-btn {
+    background-color: #d0d0d0;
+  }
+
+  .toggle-option input:checked + .toggle-btn {
+    background-color: #0066cc;
+    color: #ffffff;
+  }
+
+  .checkbox-label {
+    color: #333333;
+  }
+
+  .select-control {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .clear-btn {
+    background-color: #e0e0e0;
+    color: #333333;
+  }
+
+  .clear-btn:hover {
+    background-color: #d0d0d0;
+  }
+
+  .input-area {
+    background-color: #f8f8f8;
+    border-bottom-color: #e0e0e0;
+  }
+
+  .drop-zone {
+    border-color: #cccccc;
+  }
+
+  .drop-zone.drag-over {
+    border-color: #0066cc;
+    background-color: rgba(0, 102, 204, 0.05);
+  }
+
+  .drop-text {
+    color: #333333;
+  }
+
+  .browse-btn {
+    background-color: #0066cc;
+  }
+
+  .browse-btn:hover {
+    background-color: #0077dd;
+  }
+
+  #textInput {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  #textInput::placeholder {
+    color: #999999;
+  }
+
+  .load-btn {
+    background-color: #0066cc;
+  }
+
+  .load-btn:hover {
+    background-color: #0077dd;
+  }
+
+  .welcome-message {
+    color: #999999;
+  }
+}
+
+/* ========================================
+   RESPONSIVE ADJUSTMENTS
+   ======================================== */
+
+@media (max-width: 768px) {
+  .menu-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .menu-controls {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .text-input-area {
+    flex-direction: column;
+  }
+
+  .load-btn {
+    width: 100%;
+  }
+}

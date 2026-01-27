@@ -1,0 +1,12 @@
+{
+  "name": "hl7viewer",
+  "version": "1.0.0",
+  "description": "Web application for viewing HL7 and JSON data",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

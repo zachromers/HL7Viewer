@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HL7 Viewer</title>
+  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/viewer.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Menu Bar -->
+    <header class="menu-bar">
+      <div class="menu-left">
+        <h1 class="app-title">HL7 Viewer</h1>
+      </div>
+      <div class="menu-controls">
+        <div class="control-group">
+          <label class="control-label">View Mode:</label>
+          <div class="view-toggle">
+            <label class="toggle-option">
+              <input type="radio" name="viewMode" value="collapsed" checked>
+              <span class="toggle-btn">Tree View</span>
+            </label>
+            <label class="toggle-option">
+              <input type="radio" name="viewMode" value="standard">
+              <span class="toggle-btn">Textual View</span>
+            </label>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="checkbox-control">
+            <input type="checkbox" id="hideEmptyFields">
+            <span class="checkbox-label">Hide Empty Fields</span>
+          </label>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="messagesPerBatch">Batch Size:</label>
+          <select id="messagesPerBatch" class="select-control">
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+          </select>
+        </div>
+        <button id="clearBtn" class="clear-btn" title="Clear viewer">Clear</button>
+      </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Input Area -->
+      <div class="input-area" id="inputArea">
+        <div class="drop-zone" id="dropZone">
+          <div class="drop-zone-content">
+            <div class="drop-icon">&#128196;</div>
+            <p class="drop-text">Drag & drop HL7 or JSON files here</p>
+            <p class="drop-subtext">or</p>
+            <label class="file-input-label">
+              <input type="file" id="fileInput" accept=".hl7,.json,.txt" multiple>
+              <span class="browse-btn">Browse Files</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="text-input-area">
+          <textarea id="textInput" placeholder="Or paste HL7/JSON content here..."></textarea>
+          <button id="loadBtn" class="load-btn">Load Content</button>
+        </div>
+      </div>
+
+      <!-- Viewer Area -->
+      <div class="viewer-area" id="viewerArea">
+        <div class="hl7-container" id="viewerContainer">
+          <div class="welcome-message">
+            <p>Upload a file or paste content to view HL7/JSON data</p>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="js/hl7-fields.js"></script>
+  <script src="js/hl7-parser.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
