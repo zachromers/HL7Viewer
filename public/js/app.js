@@ -269,6 +269,12 @@
   // INITIALIZATION
   // ========================================
 
+  // Set up tree view expand/collapse listener ONCE on the container
+  // This persists across re-renders and avoids duplicate listener issues
+  viewerContainer.addEventListener('click', function(e) {
+    HL7Parser.handleTreeClick(e);
+  });
+
   // Load saved settings
   loadSettings();
 

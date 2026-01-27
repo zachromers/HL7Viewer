@@ -696,36 +696,42 @@ const HL7Parser = (function() {
   }
 
   /**
-   * Setup expand/collapse click listeners
+   * Handle tree node expand/collapse click
+   * Exported so it can be called from a persistent event listener
+   */
+  function handleTreeClick(e) {
+    const header = e.target.closest('.hl7-tree-header');
+    if (!header) return;
+
+    const content = header.nextElementSibling;
+    if (!content || !content.classList.contains('hl7-tree-content')) return;
+
+    const isCollapsed = header.classList.contains('collapsed');
+
+    if (isCollapsed) {
+      // Expand
+      header.classList.remove('collapsed');
+      header.classList.add('expanded');
+      content.style.display = 'block';
+      // Update toggle icon
+      const toggle = header.querySelector('.hl7-tree-toggle');
+      if (toggle) toggle.innerHTML = '&#9660;';
+    } else {
+      // Collapse
+      header.classList.remove('expanded');
+      header.classList.add('collapsed');
+      content.style.display = 'none';
+      // Update toggle icon
+      const toggle = header.querySelector('.hl7-tree-toggle');
+      if (toggle) toggle.innerHTML = '&#9654;';
+    }
+  }
+
+  /**
+   * Setup expand/collapse click listeners (no-op, handled by app.js)
    */
   function setupCollapseListeners(container) {
-    container.addEventListener('click', function(e) {
-      const header = e.target.closest('.hl7-tree-header');
-      if (!header) return;
-
-      const content = header.nextElementSibling;
-      if (!content || !content.classList.contains('hl7-tree-content')) return;
-
-      const isCollapsed = header.classList.contains('collapsed');
-
-      if (isCollapsed) {
-        // Expand
-        header.classList.remove('collapsed');
-        header.classList.add('expanded');
-        content.style.display = 'block';
-        // Update toggle icon
-        const toggle = header.querySelector('.hl7-tree-toggle');
-        if (toggle) toggle.innerHTML = '&#9660;';
-      } else {
-        // Collapse
-        header.classList.remove('expanded');
-        header.classList.add('collapsed');
-        content.style.display = 'none';
-        // Update toggle icon
-        const toggle = header.querySelector('.hl7-tree-toggle');
-        if (toggle) toggle.innerHTML = '&#9654;';
-      }
-    });
+    // Listener is now set up once in app.js to avoid duplicate listeners
   }
 
   /**
@@ -1579,7 +1585,8 @@ const HL7Parser = (function() {
     detectContentType: detectContentType,
     renderContent: renderContent,
     isJSONContent: isJSONContent,
-    isHL7Content: isHL7Content
+    isHL7Content: isHL7Content,
+    handleTreeClick: handleTreeClick
   };
 
 })();
