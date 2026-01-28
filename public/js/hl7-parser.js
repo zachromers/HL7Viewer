@@ -482,13 +482,29 @@ const HL7Parser = (function() {
       }
     }
 
+    // Get patient name from PID.5 if available
+    let patientName = '';
+    const pidSegment = message.segments.find(s => s.segmentId === 'PID');
+    if (pidSegment && pidSegment.fields.length > 4) {
+      const nameField = pidSegment.fields[4]; // PID.5 (0-indexed: field 4)
+      if (nameField && nameField.trim()) {
+        patientName = nameField;
+      }
+    }
+
+    // Build message title
+    let messageTitle = `Message ${msgIndex + 1}: ${escapeHtml(messageType)}`;
+    if (patientName) {
+      messageTitle += `, ${escapeHtml(patientName)}`;
+    }
+
     // Message header
     const messageHeader = document.createElement('div');
     messageHeader.className = 'hl7-tree-header hl7-tree-message-header collapsed';
     messageHeader.innerHTML = `
       <span class="hl7-tree-toggle">&#9654;</span>
       <span class="hl7-tree-icon">&#128232;</span>
-      <span class="hl7-tree-title">Message ${msgIndex + 1}: ${escapeHtml(messageType)}</span>
+      <span class="hl7-tree-title">${messageTitle}</span>
       <span class="hl7-tree-count">${message.segments.length} segments</span>
     `;
     messageDiv.appendChild(messageHeader);
