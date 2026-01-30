@@ -266,6 +266,56 @@
   }
 
   // ========================================
+  // DOWNLOAD LOCAL MODAL
+  // ========================================
+
+  const downloadLocalBtn = document.getElementById('downloadLocalBtn');
+  const downloadModal = document.getElementById('downloadModal');
+  const modalCloseBtn = document.getElementById('modalCloseBtn');
+
+  downloadLocalBtn.addEventListener('click', function() {
+    downloadModal.classList.add('visible');
+  });
+
+  modalCloseBtn.addEventListener('click', function() {
+    downloadModal.classList.remove('visible');
+  });
+
+  downloadModal.addEventListener('click', function(e) {
+    if (e.target === downloadModal) {
+      downloadModal.classList.remove('visible');
+    }
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && downloadModal.classList.contains('visible')) {
+      downloadModal.classList.remove('visible');
+    }
+  });
+
+  // Copy buttons inside the modal
+  downloadModal.addEventListener('click', function(e) {
+    const btn = e.target.closest('.copy-code-btn');
+    if (!btn) return;
+    const text = btn.getAttribute('data-copy');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function() {
+        btn.textContent = '\u2713';
+        setTimeout(function() { btn.textContent = '\uD83D\uDCCB'; }, 1500);
+      });
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      btn.textContent = '\u2713';
+      setTimeout(function() { btn.textContent = '\uD83D\uDCCB'; }, 1500);
+    }
+  });
+
+  // ========================================
   // INITIALIZATION
   // ========================================
 

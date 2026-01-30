@@ -13,6 +13,7 @@
     <header class="menu-bar">
       <div class="menu-left">
         <h1 class="app-title">HL7 Viewer</h1>
+        <button id="downloadLocalBtn" class="download-local-btn">Download Local Application</button>
       </div>
       <div class="menu-controls">
         <div class="control-group">
@@ -77,6 +78,61 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Download Local Application Modal -->
+  <div class="modal-overlay" id="downloadModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Download Local Application</h2>
+        <button class="modal-close" id="modalCloseBtn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-notice">
+          <p>If you intend to use this application with Protected Health Information (PHI), you should only run it locally on your own machine. Running locally ensures that no data leaves your device.</p>
+        </div>
+        <div class="modal-disclaimer">
+          <strong>Disclaimer:</strong> Never enter PHI into any application you do not fully understand. Before using any tool with sensitive data, verify how it processes, stores, and transmits information. This application runs entirely in your browser with no server-side data processing, but you are responsible for confirming that yourself.
+        </div>
+        <section class="modal-section">
+          <h3>1. Clone the Repository</h3>
+          <p>Open a terminal and run:</p>
+          <div class="code-block">
+            <code>git clone https://github.com/zachromers/HL7Viewer.git</code>
+            <button class="copy-code-btn" data-copy="git clone https://github.com/zachromers/HL7Viewer.git" title="Copy to clipboard">&#128203;</button>
+          </div>
+          <p>Or <a href="https://github.com/zachromers/HL7Viewer/archive/refs/heads/main.zip" target="_blank" rel="noopener">download the ZIP</a> directly from GitHub and extract it.</p>
+        </section>
+
+        <section class="modal-section">
+          <h3>2. Open in Chrome</h3>
+          <p>Navigate to the cloned folder and open the file:</p>
+          <div class="code-block">
+            <code>HL7Viewer/public/index.html</code>
+          </div>
+          <p>Right-click the file and choose <strong>Open with &rarr; Google Chrome</strong>, or drag it into an open Chrome window.</p>
+        </section>
+
+        <section class="modal-section">
+          <h3>3. Create a Desktop Shortcut</h3>
+          <ol>
+            <li>Right-click on <code>index.html</code> in the <code>public</code> folder.</li>
+            <li>Select <strong>Send to &rarr; Desktop (create shortcut)</strong>.</li>
+            <li>Optionally, rename the shortcut to <strong>HL7 Viewer</strong>.</li>
+          </ol>
+        </section>
+
+        <section class="modal-section">
+          <h3>4. Add a Chrome Bookmark</h3>
+          <ol>
+            <li>Open <code>index.html</code> in Chrome.</li>
+            <li>Press <kbd>Ctrl</kbd>+<kbd>D</kbd> (or <kbd>Cmd</kbd>+<kbd>D</kbd> on Mac).</li>
+            <li>Name the bookmark <strong>HL7 Viewer</strong> and choose a folder.</li>
+            <li>Click <strong>Done</strong>.</li>
+          </ol>
+        </section>
+      </div>
+    </div>
   </div>
 
   <script src="js/hl7-fields.js"></script>
