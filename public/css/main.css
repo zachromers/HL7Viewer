@@ -191,6 +191,25 @@ body {
   color: #1e1e1e;
 }
 
+.contact-me-btn {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  background-color: transparent;
+  border: 1px solid #4fc1ff;
+  border-radius: 4px;
+  color: #4fc1ff;
+  cursor: pointer;
+  white-space: nowrap;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.contact-me-btn:hover {
+  background-color: #4fc1ff;
+  color: #1e1e1e;
+}
+
 /* ========================================
    MODAL
    ======================================== */
@@ -647,6 +666,16 @@ body {
   }
 
   .download-local-btn:hover {
+    background-color: #0066cc;
+    color: #ffffff;
+  }
+
+  .contact-me-btn {
+    border-color: #0066cc;
+    color: #0066cc;
+  }
+
+  .contact-me-btn:hover {
     background-color: #0066cc;
     color: #ffffff;
   }
