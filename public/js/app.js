@@ -23,6 +23,8 @@
 
   // DOM Elements - Statistics
   const statsPanel = document.getElementById('statsPanel');
+  const statsNoDataMessage = document.getElementById('statsNoDataMessage');
+  const statsInputSection = document.getElementById('statsInputSection');
   const statsFiltersList = document.getElementById('statsFiltersList');
   const addFilterBtn = document.getElementById('addFilterBtn');
   const filterLogicSection = document.getElementById('filterLogicSection');
@@ -123,21 +125,41 @@
   }
 
   /**
-   * Update the "no content" message in stats panel
+   * Update the "no content" message in stats panel and enable/disable inputs
    */
   function updateStatsNoContentMessage() {
+    // Get all inputs and buttons in the stats input section
+    const statsInputs = statsInputSection.querySelectorAll('input, button');
+
     if (!currentContent) {
-      statsResults.innerHTML = `
-        <div class="stats-no-content">
-          <p>No HL7 content loaded</p>
-          <p class="stats-hint">Switch to Viewer page to load HL7 data first</p>
-        </div>
-      `;
-      statsGenerateBtn.disabled = true;
+      // Show no data message, hide input section
+      statsNoDataMessage.style.display = 'block';
+      statsInputSection.classList.add('disabled');
+      statsResults.innerHTML = '';
+
+      // Disable all inputs and buttons
+      statsInputs.forEach(el => {
+        el.disabled = true;
+      });
     } else {
-      // Only reset if showing the no-content message
+      // Hide no data message, show input section
+      statsNoDataMessage.style.display = 'none';
+      statsInputSection.classList.remove('disabled');
+
+      // Enable all inputs and buttons
+      statsInputs.forEach(el => {
+        el.disabled = false;
+      });
+
+      // Re-hide first filter's remove button (should stay hidden when only 1 filter)
+      const firstRemoveBtn = statsFiltersList.querySelector('.stats-filter-remove-btn');
+      if (firstRemoveBtn && statsFiltersList.querySelectorAll('.stats-filter-row').length === 1) {
+        firstRemoveBtn.style.visibility = 'hidden';
+      }
+
+      // Only reset results if showing empty or no previous results
       const noContent = statsResults.querySelector('.stats-no-content');
-      if (noContent && noContent.textContent.includes('No HL7 content loaded')) {
+      if (!statsResults.innerHTML.trim() || noContent) {
         statsResults.innerHTML = `
           <div class="stats-no-content">
             <p>Add filters and/or a field to analyze, then click "Evaluate"</p>
@@ -145,7 +167,6 @@
           </div>
         `;
       }
-      statsGenerateBtn.disabled = false;
     }
   }
 

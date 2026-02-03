@@ -96,7 +96,11 @@
 
       <!-- Statistics Panel -->
       <div class="stats-panel" id="statsPanel">
-        <div class="stats-input-section">
+        <div class="stats-no-data-message" id="statsNoDataMessage">
+          <p>No HL7 content loaded</p>
+          <p class="stats-hint">Switch to Viewer page to load HL7 data first</p>
+        </div>
+        <div class="stats-input-section" id="statsInputSection">
           <div class="stats-input-header">
             <h2>Field Statistics</h2>
             <p>Enter an HL7 field reference to generate statistics. Optionally filter messages first.</p>

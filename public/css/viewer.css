@@ -1094,6 +1094,28 @@
   display: block;
 }
 
+/* Stats No Data Message */
+.stats-no-data-message {
+  display: none;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 40px 20px;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.stats-no-data-message p {
+  font-size: 16px;
+  color: #cccccc;
+  margin-bottom: 8px;
+}
+
+.stats-no-data-message .stats-hint {
+  font-size: 13px;
+  color: #999999;
+}
+
 /* Stats Input Section */
 .stats-input-section {
   background-color: #252526;
@@ -1101,6 +1123,11 @@
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 24px;
+}
+
+.stats-input-section.disabled {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .stats-input-header {
@@ -1847,6 +1874,19 @@
 
 /* Light Theme Support for Stats */
 @media (prefers-color-scheme: light) {
+  .stats-no-data-message {
+    background-color: #f3f3f3;
+    border-color: #e0e0e0;
+  }
+
+  .stats-no-data-message p {
+    color: #333333;
+  }
+
+  .stats-no-data-message .stats-hint {
+    color: #666666;
+  }
+
   .stats-input-section {
     background-color: #f3f3f3;
     border-color: #e0e0e0;
