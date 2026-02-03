@@ -4,7 +4,7 @@
 (function() {
   'use strict';
 
-  // DOM Elements
+  // DOM Elements - Viewer
   const viewModeRadios = document.querySelectorAll('input[name="viewMode"]');
   const hideEmptyCheckbox = document.getElementById('hideEmptyFields');
   const messagesPerBatchSelect = document.getElementById('messagesPerBatch');
@@ -15,9 +15,21 @@
   const loadBtn = document.getElementById('loadBtn');
   const inputArea = document.getElementById('inputArea');
   const viewerContainer = document.getElementById('viewerContainer');
+  const viewerArea = document.getElementById('viewerArea');
+
+  // DOM Elements - Page Mode
+  const pageModeRadios = document.querySelectorAll('input[name="pageMode"]');
+  const viewerOnlyControls = document.querySelectorAll('.viewer-only-control');
+
+  // DOM Elements - Statistics
+  const statsPanel = document.getElementById('statsPanel');
+  const statsFieldInput = document.getElementById('statsFieldInput');
+  const statsGenerateBtn = document.getElementById('statsGenerateBtn');
+  const statsResults = document.getElementById('statsResults');
 
   // Current content state
   let currentContent = null;
+  let currentPageMode = 'viewer';
 
   // ========================================
   // SETTINGS MANAGEMENT
@@ -61,6 +73,75 @@
   }
 
   // ========================================
+  // PAGE MODE MANAGEMENT
+  // ========================================
+
+  /**
+   * Switch between viewer and statistics pages
+   */
+  function setPageMode(mode) {
+    currentPageMode = mode;
+
+    if (mode === 'viewer') {
+      // Show viewer, hide statistics
+      viewerArea.style.display = 'block';
+      statsPanel.classList.remove('active');
+
+      // Show input area only if no content loaded
+      if (currentContent) {
+        inputArea.classList.add('hidden');
+      } else {
+        inputArea.classList.remove('hidden');
+      }
+
+      // Show viewer-only controls
+      viewerOnlyControls.forEach(el => {
+        el.style.display = 'flex';
+      });
+    } else if (mode === 'statistics') {
+      // Show statistics, hide viewer
+      viewerArea.style.display = 'none';
+      inputArea.classList.add('hidden');
+      statsPanel.classList.add('active');
+
+      // Hide viewer-only controls
+      viewerOnlyControls.forEach(el => {
+        el.style.display = 'none';
+      });
+
+      // Check if content is loaded
+      updateStatsNoContentMessage();
+    }
+  }
+
+  /**
+   * Update the "no content" message in stats panel
+   */
+  function updateStatsNoContentMessage() {
+    if (!currentContent) {
+      statsResults.innerHTML = `
+        <div class="stats-no-content">
+          <p>No HL7 content loaded</p>
+          <p class="stats-hint">Switch to Viewer page to load HL7 data first</p>
+        </div>
+      `;
+      statsGenerateBtn.disabled = true;
+    } else {
+      // Only reset if showing the no-content message
+      const noContent = statsResults.querySelector('.stats-no-content');
+      if (noContent && noContent.textContent.includes('No HL7 content loaded')) {
+        statsResults.innerHTML = `
+          <div class="stats-no-content">
+            <p>Enter a field reference above and click "Generate Statistics"</p>
+            <p class="stats-hint">Examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
+          </div>
+        `;
+      }
+      statsGenerateBtn.disabled = false;
+    }
+  }
+
+  // ========================================
   // CONTENT RENDERING
   // ========================================
 
@@ -97,6 +178,9 @@
 
     // Collapse input area after successful load
     inputArea.classList.add('hidden');
+
+    // Update stats panel state
+    updateStatsNoContentMessage();
   }
 
   /**
@@ -106,7 +190,16 @@
     currentContent = null;
     textInput.value = '';
     fileInput.value = '';
-    inputArea.classList.remove('hidden');
+
+    // Switch back to viewer mode if on statistics page
+    if (currentPageMode === 'statistics') {
+      document.querySelector('input[name="pageMode"][value="viewer"]').checked = true;
+      setPageMode('viewer');
+    } else {
+      // Show input area
+      inputArea.classList.remove('hidden');
+    }
+
     renderCurrentContent();
 
     // Remove any existing tooltips
@@ -114,6 +207,10 @@
     if (tooltip) {
       tooltip.remove();
     }
+
+    // Reset stats panel
+    statsFieldInput.value = '';
+    updateStatsNoContentMessage();
   }
 
   // ========================================
@@ -162,6 +259,13 @@
   // ========================================
   // EVENT HANDLERS
   // ========================================
+
+  // Page mode change handlers
+  pageModeRadios.forEach(radio => {
+    radio.addEventListener('change', function() {
+      setPageMode(this.value);
+    });
+  });
 
   // Settings change handlers
   viewModeRadios.forEach(radio => {
@@ -316,6 +420,40 @@
   });
 
   // ========================================
+  // STATISTICS HANDLERS
+  // ========================================
+
+  // Generate statistics button
+  statsGenerateBtn.addEventListener('click', function() {
+    const fieldRef = statsFieldInput.value.trim();
+    if (!fieldRef) {
+      statsResults.innerHTML = '<div class="stats-error">Please enter a field reference (e.g., PID.5, FT1.13)</div>';
+      return;
+    }
+
+    if (!currentContent) {
+      statsResults.innerHTML = '<div class="stats-error">No HL7 content loaded. Switch to Viewer page to load data first.</div>';
+      return;
+    }
+
+    // Check if content is HL7
+    if (!HL7Parser.isHL7Content(currentContent)) {
+      statsResults.innerHTML = '<div class="stats-error">Statistics are only available for HL7 content. The loaded content appears to be JSON.</div>';
+      return;
+    }
+
+    HL7Stats.runStatistics(currentContent, fieldRef, 'statsResults');
+  });
+
+  // Allow Enter key to generate statistics
+  statsFieldInput.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      statsGenerateBtn.click();
+    }
+  });
+
+  // ========================================
   // INITIALIZATION
   // ========================================
 
@@ -327,6 +465,9 @@
 
   // Load saved settings
   loadSettings();
+
+  // Initialize page mode
+  setPageMode('viewer');
 
   // Initial render
   renderCurrentContent();

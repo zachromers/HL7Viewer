@@ -20,6 +20,19 @@
       </div>
       <div class="menu-controls">
         <div class="control-group">
+          <label class="control-label">Page:</label>
+          <div class="view-toggle">
+            <label class="toggle-option">
+              <input type="radio" name="pageMode" value="viewer" checked>
+              <span class="toggle-btn">Viewer</span>
+            </label>
+            <label class="toggle-option">
+              <input type="radio" name="pageMode" value="statistics">
+              <span class="toggle-btn">Statistics</span>
+            </label>
+          </div>
+        </div>
+        <div class="control-group viewer-only-control">
           <label class="control-label">View Mode:</label>
           <div class="view-toggle">
             <label class="toggle-option">
@@ -32,13 +45,13 @@
             </label>
           </div>
         </div>
-        <div class="control-group">
+        <div class="control-group viewer-only-control">
           <label class="checkbox-control">
             <input type="checkbox" id="hideEmptyFields">
             <span class="checkbox-label">Hide Empty Fields</span>
           </label>
         </div>
-        <div class="control-group">
+        <div class="control-group viewer-only-control">
           <label class="control-label" for="messagesPerBatch">Batch Size:</label>
           <select id="messagesPerBatch" class="select-control">
             <option value="20">20</option>
@@ -77,6 +90,29 @@
         <div class="hl7-container" id="viewerContainer">
           <div class="welcome-message">
             <p>Upload a file or paste content to view HL7/JSON data</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Statistics Panel -->
+      <div class="stats-panel" id="statsPanel">
+        <div class="stats-input-section">
+          <div class="stats-input-header">
+            <h2>Field Statistics</h2>
+            <p>Enter an HL7 field reference to generate statistics across all loaded messages.</p>
+          </div>
+          <div class="stats-input-form">
+            <div class="stats-input-group">
+              <label for="statsFieldInput">Field Reference:</label>
+              <input type="text" id="statsFieldInput" class="stats-field-input" placeholder="e.g., FT1.13, PID.5, MSH.9.1">
+            </div>
+            <button id="statsGenerateBtn" class="stats-generate-btn">Generate Statistics</button>
+          </div>
+        </div>
+        <div id="statsResults" class="stats-results">
+          <div class="stats-no-content">
+            <p>Enter a field reference above and click "Generate Statistics"</p>
+            <p class="stats-hint">Examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
           </div>
         </div>
       </div>
@@ -143,6 +179,7 @@
 
   <script src="js/hl7-fields.js"></script>
   <script src="js/hl7-parser.js"></script>
+  <script src="js/stats.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

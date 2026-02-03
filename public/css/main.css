@@ -60,6 +60,10 @@ body {
   gap: 8px;
 }
 
+.viewer-only-control {
+  transition: opacity 0.2s ease;
+}
+
 .control-label {
   font-size: 13px;
   color: #999999;
