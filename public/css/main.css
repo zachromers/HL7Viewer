@@ -47,6 +47,11 @@ body {
   white-space: nowrap;
 }
 
+.page-toggle-group {
+  padding-left: 16px;
+  border-left: 1px solid #3c3c3c;
+}
+
 .menu-controls {
   display: flex;
   align-items: center;
@@ -565,6 +570,10 @@ body {
 
   .app-title {
     color: #0066cc;
+  }
+
+  .page-toggle-group {
+    border-left-color: #e0e0e0;
   }
 
   .control-label {
