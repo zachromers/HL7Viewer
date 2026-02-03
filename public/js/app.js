@@ -140,7 +140,7 @@
       if (noContent && noContent.textContent.includes('No HL7 content loaded')) {
         statsResults.innerHTML = `
           <div class="stats-no-content">
-            <p>Enter a field reference above and click "Generate Statistics"</p>
+            <p>Add filters and/or a field to analyze, then click "Evaluate"</p>
             <p class="stats-hint">Examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
           </div>
         `;

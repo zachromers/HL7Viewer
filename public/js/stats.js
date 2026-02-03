@@ -955,11 +955,11 @@ const HL7Stats = (function() {
             <div class="stats-filtered-controls">
               <div class="view-toggle">
                 <label class="toggle-option">
-                  <input type="radio" name="filteredViewMode" value="collapsed" checked>
+                  <input type="radio" name="filteredViewMode" value="collapsed">
                   <span class="toggle-btn">Tree View</span>
                 </label>
                 <label class="toggle-option">
-                  <input type="radio" name="filteredViewMode" value="standard">
+                  <input type="radio" name="filteredViewMode" value="standard" checked>
                   <span class="toggle-btn">Textual View</span>
                 </label>
               </div>
@@ -1051,11 +1051,11 @@ const HL7Stats = (function() {
             <div class="stats-filtered-controls">
               <div class="view-toggle">
                 <label class="toggle-option">
-                  <input type="radio" name="filteredViewMode" value="collapsed" checked>
+                  <input type="radio" name="filteredViewMode" value="collapsed">
                   <span class="toggle-btn">Tree View</span>
                 </label>
                 <label class="toggle-option">
-                  <input type="radio" name="filteredViewMode" value="standard">
+                  <input type="radio" name="filteredViewMode" value="standard" checked>
                   <span class="toggle-btn">Textual View</span>
                 </label>
               </div>
