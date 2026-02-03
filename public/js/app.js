@@ -23,9 +23,17 @@
 
   // DOM Elements - Statistics
   const statsPanel = document.getElementById('statsPanel');
+  const statsFiltersList = document.getElementById('statsFiltersList');
+  const addFilterBtn = document.getElementById('addFilterBtn');
+  const filterLogicSection = document.getElementById('filterLogicSection');
+  const customLogicSection = document.getElementById('customLogicSection');
+  const customLogicInput = document.getElementById('customLogicInput');
   const statsFieldInput = document.getElementById('statsFieldInput');
   const statsGenerateBtn = document.getElementById('statsGenerateBtn');
   const statsResults = document.getElementById('statsResults');
+
+  // Filter state
+  let filterCounter = 1;
 
   // Current content state
   let currentContent = null;
@@ -209,6 +217,7 @@
     }
 
     // Reset stats panel
+    resetFilters();
     statsFieldInput.value = '';
     updateStatsNoContentMessage();
   }
@@ -423,11 +432,132 @@
   // STATISTICS HANDLERS
   // ========================================
 
+  /**
+   * Update filter logic section visibility
+   */
+  function updateFilterLogicVisibility() {
+    const filterRows = statsFiltersList.querySelectorAll('.stats-filter-row');
+    const hasMultipleFilters = filterRows.length > 1;
+
+    filterLogicSection.style.display = hasMultipleFilters ? 'block' : 'none';
+
+    // Update remove button visibility
+    filterRows.forEach((row, index) => {
+      const removeBtn = row.querySelector('.stats-filter-remove-btn');
+      if (removeBtn) {
+        removeBtn.style.visibility = filterRows.length > 1 ? 'visible' : 'hidden';
+      }
+    });
+  }
+
+  /**
+   * Add a new filter row
+   */
+  function addFilterRow() {
+    filterCounter++;
+    const newRow = document.createElement('div');
+    newRow.className = 'stats-filter-row';
+    newRow.dataset.filterId = filterCounter;
+    newRow.innerHTML = `
+      <span class="stats-filter-label">F${filterCounter}</span>
+      <input type="text" class="stats-field-input stats-filter-input" placeholder="e.g., PV1.2 = E">
+      <button type="button" class="stats-filter-remove-btn" title="Remove filter">&#10005;</button>
+    `;
+    statsFiltersList.appendChild(newRow);
+    updateFilterLogicVisibility();
+
+    // Focus the new input
+    newRow.querySelector('input').focus();
+  }
+
+  /**
+   * Remove a filter row
+   */
+  function removeFilterRow(row) {
+    row.remove();
+    updateFilterLogicVisibility();
+  }
+
+  /**
+   * Get all filters and logic settings
+   */
+  function getFiltersConfig() {
+    const filterRows = statsFiltersList.querySelectorAll('.stats-filter-row');
+    const filters = [];
+
+    filterRows.forEach(row => {
+      const input = row.querySelector('input');
+      const label = row.querySelector('.stats-filter-label').textContent;
+      const value = input.value.trim();
+      if (value) {
+        filters.push({ label, expression: value });
+      }
+    });
+
+    if (filters.length === 0) {
+      return null;
+    }
+
+    if (filters.length === 1) {
+      return { filters, logic: 'single', expression: null };
+    }
+
+    const logicMode = document.querySelector('input[name="filterLogic"]:checked').value;
+    let expression = null;
+
+    if (logicMode === 'custom') {
+      expression = customLogicInput.value.trim();
+    }
+
+    return { filters, logic: logicMode, expression };
+  }
+
+  /**
+   * Reset filters to initial state
+   */
+  function resetFilters() {
+    filterCounter = 1;
+    statsFiltersList.innerHTML = `
+      <div class="stats-filter-row" data-filter-id="1">
+        <span class="stats-filter-label">F1</span>
+        <input type="text" class="stats-field-input stats-filter-input" placeholder="e.g., PV1.2 = E">
+        <button type="button" class="stats-filter-remove-btn" title="Remove filter" style="visibility: hidden;">&#10005;</button>
+      </div>
+    `;
+    filterLogicSection.style.display = 'none';
+    customLogicSection.style.display = 'none';
+    customLogicInput.value = '';
+    const andRadio = document.querySelector('input[name="filterLogic"][value="AND"]');
+    if (andRadio) andRadio.checked = true;
+  }
+
+  // Add filter button
+  addFilterBtn.addEventListener('click', addFilterRow);
+
+  // Remove filter button (delegated)
+  statsFiltersList.addEventListener('click', function(e) {
+    const removeBtn = e.target.closest('.stats-filter-remove-btn');
+    if (removeBtn) {
+      const row = removeBtn.closest('.stats-filter-row');
+      removeFilterRow(row);
+    }
+  });
+
+  // Filter logic radio buttons
+  document.querySelectorAll('input[name="filterLogic"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+      customLogicSection.style.display = this.value === 'custom' ? 'block' : 'none';
+    });
+  });
+
   // Generate statistics button
   statsGenerateBtn.addEventListener('click', function() {
     const fieldRef = statsFieldInput.value.trim();
-    if (!fieldRef) {
-      statsResults.innerHTML = '<div class="stats-error">Please enter a field reference (e.g., PID.5, FT1.13)</div>';
+    const filtersConfig = getFiltersConfig();
+
+    // Must have either a field to analyze or filters applied
+    if (!fieldRef && !filtersConfig) {
+      statsResults.innerHTML = '<div class="stats-error">Please enter a field reference to analyze, or add a filter to view filtered messages.</div>';
       return;
     }
 
@@ -442,7 +572,7 @@
       return;
     }
 
-    HL7Stats.runStatistics(currentContent, fieldRef, 'statsResults');
+    HL7Stats.runStatistics(currentContent, fieldRef, 'statsResults', filtersConfig);
   });
 
   // Allow Enter key to generate statistics

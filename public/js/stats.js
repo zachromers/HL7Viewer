@@ -5,6 +5,272 @@ const HL7Stats = (function() {
   'use strict';
 
   /**
+   * Parse a filter expression like "PV1.2 = E" or "PV1.2 != E"
+   * Returns { fieldRef, operator, value } or null if invalid
+   */
+  function parseFilterExpression(filterExpr) {
+    if (!filterExpr || typeof filterExpr !== 'string') return null;
+
+    const trimmed = filterExpr.trim();
+    if (!trimmed) return null;
+
+    // Support operators: =, !=, contains, !contains
+    const operators = ['!=', '=', '!contains', 'contains'];
+
+    for (const op of operators) {
+      const parts = trimmed.split(new RegExp(`\\s*${op.replace('!', '\\!')}\\s*`, 'i'));
+      if (parts.length === 2) {
+        const fieldRef = parts[0].trim();
+        const value = parts[1].trim();
+
+        if (fieldRef && parseFieldReference(fieldRef)) {
+          return {
+            fieldRef: fieldRef,
+            operator: op.toLowerCase(),
+            value: value
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check if a message matches a single filter condition
+   */
+  function messageMatchesSingleFilter(messageSegments, filter, componentSeparator, subcomponentSeparator) {
+    const parsed = parseFieldReference(filter.fieldRef);
+    if (!parsed) return true; // No valid filter = include all
+
+    // Find the segment in this message
+    const segment = messageSegments.find(s => s.segmentId === parsed.segment);
+    if (!segment) {
+      // Segment not found - for = operator, this doesn't match; for != it does
+      return filter.operator === '!=' || filter.operator === '!contains';
+    }
+
+    // Extract the field value
+    const value = extractValueFromSegment(
+      segment,
+      parsed.field,
+      parsed.component,
+      parsed.subcomponent,
+      componentSeparator,
+      subcomponentSeparator
+    );
+
+    const fieldValue = (value || '').trim().toUpperCase();
+    const filterValue = filter.value.trim().toUpperCase();
+
+    switch (filter.operator) {
+      case '=':
+        return fieldValue === filterValue;
+      case '!=':
+        return fieldValue !== filterValue;
+      case 'contains':
+        return fieldValue.includes(filterValue);
+      case '!contains':
+        return !fieldValue.includes(filterValue);
+      default:
+        return true;
+    }
+  }
+
+  /**
+   * Evaluate multiple filters against a message
+   */
+  function messageMatchesFilters(messageSegments, filtersConfig, componentSeparator, subcomponentSeparator) {
+    if (!filtersConfig || !filtersConfig.filters || filtersConfig.filters.length === 0) {
+      return true;
+    }
+
+    const filters = filtersConfig.filters;
+
+    // Build a map of filter results by label
+    const filterResults = {};
+    filters.forEach(f => {
+      const parsedFilter = parseFilterExpression(f.expression);
+      if (parsedFilter) {
+        filterResults[f.label] = messageMatchesSingleFilter(
+          messageSegments,
+          parsedFilter,
+          componentSeparator,
+          subcomponentSeparator
+        );
+      } else {
+        // Invalid filter expression - treat as true to not exclude messages
+        filterResults[f.label] = true;
+      }
+    });
+
+    // Single filter
+    if (filtersConfig.logic === 'single' || filters.length === 1) {
+      return filterResults[filters[0].label];
+    }
+
+    // AND logic
+    if (filtersConfig.logic === 'AND') {
+      return Object.values(filterResults).every(r => r === true);
+    }
+
+    // OR logic
+    if (filtersConfig.logic === 'OR') {
+      return Object.values(filterResults).some(r => r === true);
+    }
+
+    // Custom logic
+    if (filtersConfig.logic === 'custom' && filtersConfig.expression) {
+      return evaluateCustomLogic(filtersConfig.expression, filterResults);
+    }
+
+    // Default to AND
+    return Object.values(filterResults).every(r => r === true);
+  }
+
+  /**
+   * Validate custom logic expression
+   * Returns { valid: true } or { valid: false, error: "error message" }
+   */
+  function validateCustomLogic(expression, availableLabels) {
+    if (!expression || !expression.trim()) {
+      return { valid: false, error: 'Custom logic expression is empty' };
+    }
+
+    const expr = expression.trim().toUpperCase();
+
+    // Check for balanced parentheses
+    let parenCount = 0;
+    for (const char of expr) {
+      if (char === '(') parenCount++;
+      if (char === ')') parenCount--;
+      if (parenCount < 0) {
+        return { valid: false, error: 'Unbalanced parentheses - extra closing parenthesis' };
+      }
+    }
+    if (parenCount !== 0) {
+      return { valid: false, error: 'Unbalanced parentheses - missing closing parenthesis' };
+    }
+
+    // Normalize the expression for validation
+    let normalized = expr;
+
+    // Sort labels by length descending to avoid partial replacements (F10 before F1)
+    const sortedLabels = [...availableLabels].sort((a, b) => b.length - a.length);
+
+    // Replace valid filter labels with a placeholder
+    sortedLabels.forEach(label => {
+      const regex = new RegExp('\\b' + label.toUpperCase() + '\\b', 'g');
+      normalized = normalized.replace(regex, 'X');
+    });
+
+    // Replace AND/OR with placeholders
+    normalized = normalized.replace(/\bAND\b/g, '&').replace(/\bOR\b/g, '|');
+
+    // Remove spaces and parentheses for final check
+    const simplified = normalized.replace(/[\s()]/g, '');
+
+    // Check if there are any unrecognized filter references (like F5 when only F1, F2 exist)
+    const unmatchedFilters = simplified.match(/F\d+/gi);
+    if (unmatchedFilters) {
+      return {
+        valid: false,
+        error: `Unknown filter label(s): ${unmatchedFilters.join(', ')}. Available labels: ${availableLabels.join(', ')}`
+      };
+    }
+
+    // Valid pattern should only contain: X (filter placeholders), & (AND), | (OR)
+    // Pattern: should be alternating X and operators, like X&X|X or X&(X|X)
+    if (!/^[X&|]+$/.test(simplified)) {
+      // Find what's invalid
+      const invalidChars = simplified.replace(/[X&|]/g, '');
+      if (invalidChars) {
+        return {
+          valid: false,
+          error: `Invalid characters or words in expression. Use only filter labels (${availableLabels.join(', ')}), AND, OR, and parentheses.`
+        };
+      }
+    }
+
+    // Check for consecutive operators or missing operands
+    if (/^[&|]/.test(simplified)) {
+      return { valid: false, error: 'Expression cannot start with AND/OR' };
+    }
+    if (/[&|]$/.test(simplified)) {
+      return { valid: false, error: 'Expression cannot end with AND/OR' };
+    }
+    if (/[&|]{2,}/.test(simplified)) {
+      return { valid: false, error: 'Cannot have consecutive AND/OR operators' };
+    }
+    if (/XX/.test(simplified)) {
+      return { valid: false, error: 'Missing AND/OR between filter labels' };
+    }
+
+    return { valid: true };
+  }
+
+  /**
+   * Evaluate custom logic expression like "F1 AND (F2 OR F3)"
+   */
+  function evaluateCustomLogic(expression, filterResults) {
+    try {
+      // Replace filter labels with their boolean results
+      let evalExpr = expression.toUpperCase();
+
+      // Sort labels by length descending to avoid partial replacements (F10 before F1)
+      const labels = Object.keys(filterResults).sort((a, b) => b.length - a.length);
+
+      labels.forEach(label => {
+        const regex = new RegExp('\\b' + label.toUpperCase() + '\\b', 'g');
+        evalExpr = evalExpr.replace(regex, filterResults[label] ? 'true' : 'false');
+      });
+
+      // Replace AND/OR with JavaScript operators
+      evalExpr = evalExpr.replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||');
+
+      // Validate that only allowed characters remain
+      if (!/^[truefalse&|() ]+$/i.test(evalExpr)) {
+        console.warn('Invalid custom logic expression after substitution:', evalExpr);
+        return true;
+      }
+
+      // Evaluate the expression
+      return Function('"use strict"; return (' + evalExpr + ')')();
+    } catch (e) {
+      console.warn('Error evaluating custom logic:', e);
+      return true;
+    }
+  }
+
+  /**
+   * Legacy single filter check (for backwards compatibility)
+   */
+  function messageMatchesFilter(messageSegments, filter, fieldSeparator, componentSeparator, subcomponentSeparator) {
+    return messageMatchesSingleFilter(messageSegments, filter, componentSeparator, subcomponentSeparator);
+  }
+
+  /**
+   * Extract value from a parsed segment object
+   */
+  function extractValueFromSegment(segment, fieldNum, compNum, subcompNum, compSep, subcompSep) {
+    let fieldValue;
+
+    if (segment.segmentId === 'MSH') {
+      if (fieldNum === 1) return segment.fieldSeparator;
+      if (fieldNum === 2) return segment.fields[0] || '';
+      const fieldIndex = fieldNum - 2;
+      if (fieldIndex < 0 || fieldIndex >= segment.fields.length) return '';
+      fieldValue = segment.fields[fieldIndex];
+    } else {
+      const fieldIndex = fieldNum - 1;
+      if (fieldIndex < 0 || fieldIndex >= segment.fields.length) return '';
+      fieldValue = segment.fields[fieldIndex];
+    }
+
+    return extractComponentValue(fieldValue, compNum, subcompNum, compSep, subcompSep);
+  }
+
+  /**
    * Parse a field reference like "FT1.13" or "PID.5.1" into components
    * Returns { segment, field, component, subcomponent } or null if invalid
    */
@@ -39,16 +305,12 @@ const HL7Stats = (function() {
   }
 
   /**
-   * Extract all values for a specific field from HL7 content
-   * Returns an array of { messageIndex, value } objects
+   * Parse HL7 content into structured messages for filtering
    */
-  function extractFieldValues(content, fieldRef) {
-    const parsed = parseFieldReference(fieldRef);
-    if (!parsed) return { error: 'Invalid field reference. Use format like PID.5, FT1.13, or MSH.9.1' };
-
+  function parseMessagesForFiltering(content) {
     const lines = content.split(/\r\n|\n|\r/);
-    const results = [];
-    let currentMessageIndex = -1;
+    const messages = [];
+    let currentMessage = null;
     let fieldSeparator = '|';
     let componentSeparator = '^';
     let subcomponentSeparator = '&';
@@ -59,9 +321,12 @@ const HL7Stats = (function() {
 
       const segmentId = trimmedLine.substring(0, 3);
 
-      // Track message boundaries
       if (segmentId === 'MSH') {
-        currentMessageIndex++;
+        // Save previous message
+        if (currentMessage) {
+          messages.push(currentMessage);
+        }
+
         // Parse encoding characters
         if (trimmedLine.length > 3) {
           fieldSeparator = trimmedLine[3];
@@ -71,29 +336,181 @@ const HL7Stats = (function() {
           componentSeparator = encodingChars[0] || '^';
           subcomponentSeparator = encodingChars[3] || '&';
         }
+
+        currentMessage = {
+          fieldSeparator,
+          componentSeparator,
+          subcomponentSeparator,
+          segments: []
+        };
       }
 
-      // Check if this line matches the target segment
-      if (segmentId === parsed.segment) {
-        const value = extractValueFromLine(
-          trimmedLine,
+      if (currentMessage && HL7_SEGMENT_IDS.includes(segmentId)) {
+        // Parse segment fields
+        let fields;
+        if (segmentId === 'MSH') {
+          const afterSep = trimmedLine.substring(4);
+          fields = afterSep.split(fieldSeparator);
+        } else {
+          const afterId = trimmedLine.substring(3);
+          if (afterId.startsWith(fieldSeparator)) {
+            fields = afterId.substring(1).split(fieldSeparator);
+          } else {
+            fields = afterId.split(fieldSeparator);
+          }
+        }
+
+        currentMessage.segments.push({
           segmentId,
-          parsed.field,
-          parsed.component,
-          parsed.subcomponent,
+          fields,
           fieldSeparator,
           componentSeparator,
           subcomponentSeparator
-        );
-
-        results.push({
-          messageIndex: currentMessageIndex,
-          value: value
         });
       }
     }
 
-    return { results, totalMessages: currentMessageIndex + 1 };
+    // Don't forget the last message
+    if (currentMessage) {
+      messages.push(currentMessage);
+    }
+
+    return messages;
+  }
+
+  /**
+   * Extract all values for a specific field from HL7 content
+   * Returns an array of { messageIndex, value } objects
+   * Supports optional filtersConfig to only include matching messages
+   * If fieldRef is empty, only returns filter results without field analysis
+   */
+  function extractFieldValues(content, fieldRef, filtersConfig) {
+    // If no field specified, we're only filtering (no field analysis)
+    const filterOnly = !fieldRef || !fieldRef.trim();
+
+    let parsed = null;
+    if (!filterOnly) {
+      parsed = parseFieldReference(fieldRef);
+      if (!parsed) return { error: 'Invalid field reference. Use format like PID.5, FT1.13, or MSH.9.1' };
+    }
+
+    // Parse all messages first
+    const messages = parseMessagesForFiltering(content);
+    const totalMessages = messages.length;
+
+    // Apply filters if provided
+    let filteredMessages = messages;
+    let filteredCount = totalMessages;
+    let hasValidFilters = false;
+    let filterDescription = '';
+
+    if (filtersConfig && filtersConfig.filters && filtersConfig.filters.length > 0) {
+      // Validate all filter expressions
+      const invalidFilters = [];
+      filtersConfig.filters.forEach(f => {
+        const parsed = parseFilterExpression(f.expression);
+        if (!parsed) {
+          invalidFilters.push(f.label);
+        }
+      });
+
+      if (invalidFilters.length > 0) {
+        return { error: `Invalid filter format for ${invalidFilters.join(', ')}. Use format like "PV1.2 = E" or "PV1.2 != E" or "PV1.2 contains E"` };
+      }
+
+      // Validate custom logic expression if used
+      if (filtersConfig.logic === 'custom') {
+        if (!filtersConfig.expression || !filtersConfig.expression.trim()) {
+          return { error: 'Please enter a custom logic expression (e.g., "F1 AND (F2 OR F3)")' };
+        }
+
+        // Validate the custom logic syntax
+        const availableLabels = filtersConfig.filters.map(f => f.label);
+        const validation = validateCustomLogic(filtersConfig.expression, availableLabels);
+        if (!validation.valid) {
+          return { error: `Invalid custom logic: ${validation.error}` };
+        }
+      }
+
+      hasValidFilters = true;
+
+      filteredMessages = messages.filter((msg) =>
+        messageMatchesFilters(msg.segments, filtersConfig, msg.componentSeparator, msg.subcomponentSeparator)
+      );
+      filteredCount = filteredMessages.length;
+
+      // Build filter description for display
+      if (filtersConfig.filters.length === 1) {
+        filterDescription = filtersConfig.filters[0].expression;
+      } else {
+        const filterLabels = filtersConfig.filters.map(f => `${f.label}: ${f.expression}`).join(', ');
+        if (filtersConfig.logic === 'custom') {
+          filterDescription = `${filterLabels} [Logic: ${filtersConfig.expression}]`;
+        } else {
+          filterDescription = `${filterLabels} [Logic: ${filtersConfig.logic}]`;
+        }
+      }
+    }
+
+    // Extract field values from filtered messages (only if a field is specified)
+    const results = [];
+
+    if (!filterOnly && parsed) {
+      filteredMessages.forEach((msg, idx) => {
+        // Find segments matching the target
+        const matchingSegments = msg.segments.filter(s => s.segmentId === parsed.segment);
+
+        if (matchingSegments.length === 0) {
+          // Segment not found in this message - count as empty
+          results.push({
+            messageIndex: idx,
+            value: ''
+          });
+        } else {
+          // Extract value from each matching segment
+          matchingSegments.forEach(segment => {
+            const value = extractValueFromSegment(
+              segment,
+              parsed.field,
+              parsed.component,
+              parsed.subcomponent,
+              msg.componentSeparator,
+              msg.subcomponentSeparator
+            );
+
+            results.push({
+              messageIndex: idx,
+              value: value
+            });
+          });
+        }
+      });
+    }
+
+    // Build raw HL7 content from filtered messages for download/view
+    let filteredHL7Content = '';
+    if (hasValidFilters) {
+      filteredHL7Content = filteredMessages.map(msg => {
+        return msg.segments.map(seg => {
+          if (seg.segmentId === 'MSH') {
+            return seg.segmentId + seg.fieldSeparator + seg.fields.join(seg.fieldSeparator);
+          } else {
+            return seg.segmentId + seg.fieldSeparator + seg.fields.join(seg.fieldSeparator);
+          }
+        }).join('\r\n');
+      }).join('\r\n\r\n');
+    }
+
+    return {
+      results,
+      totalMessages,
+      filteredMessages: filteredCount,
+      filterApplied: hasValidFilters,
+      filterExpression: filterDescription,
+      filtersConfig: hasValidFilters ? filtersConfig : null,
+      filteredHL7Content: filteredHL7Content,
+      filterOnly: filterOnly
+    };
   }
 
   /**
@@ -162,7 +579,20 @@ const HL7Stats = (function() {
       return { error: extractionResult.error };
     }
 
-    const { results, totalMessages } = extractionResult;
+    const { results, totalMessages, filteredMessages, filterApplied, filterExpression, filterOnly } = extractionResult;
+    const messageCount = filterApplied ? filteredMessages : totalMessages;
+
+    // If filter only mode (no field to analyze), return simplified stats
+    if (filterOnly) {
+      return {
+        totalMessages,
+        filteredMessages: filterApplied ? filteredMessages : null,
+        filterApplied,
+        filterExpression,
+        filterOnly: true,
+        filteredHL7Content: extractionResult.filteredHL7Content || ''
+      };
+    }
 
     // Count distinct values
     const valueCounts = {};
@@ -196,7 +626,7 @@ const HL7Stats = (function() {
     const messagesWithOnlyEmpty = [...messageHasNoValue].filter(m => !messageHasValue.has(m)).length;
     // Messages without the segment at all
     const messagesWithSegment = new Set([...messageHasValue, ...messageHasNoValue]);
-    const messagesWithoutSegment = totalMessages - messagesWithSegment.size;
+    const messagesWithoutSegment = messageCount - messagesWithSegment.size;
     messagesWithoutValue = messagesWithOnlyEmpty + messagesWithoutSegment;
 
     // Sort value counts by count (descending)
@@ -206,11 +636,15 @@ const HL7Stats = (function() {
 
     return {
       totalMessages,
+      filteredMessages: filterApplied ? filteredMessages : null,
+      filterApplied,
+      filterExpression,
       messagesWithValue,
       messagesWithoutValue,
       totalOccurrences: results.length,
       distinctValues: sortedValues,
-      segmentNotFound: results.length === 0
+      segmentNotFound: results.length === 0 && !filterApplied,
+      filteredHL7Content: extractionResult.filteredHL7Content || ''
     };
   }
 
@@ -392,6 +826,12 @@ const HL7Stats = (function() {
       return;
     }
 
+    // Handle filter-only mode (no field to analyze)
+    if (stats.filterOnly) {
+      renderFilterOnlyView(stats, containerId);
+      return;
+    }
+
     if (stats.segmentNotFound) {
       container.innerHTML = `
         <div class="stats-error">
@@ -403,10 +843,40 @@ const HL7Stats = (function() {
       return;
     }
 
+    // Build filter info and actions if applied
+    let filterInfoHtml = '';
+    let filterActionsHtml = '';
+    if (stats.filterApplied) {
+      filterInfoHtml = `
+        <div class="stats-filter-info">
+          <span class="stats-filter-label">Filter Applied:</span>
+          <span class="stats-filter-expression">${escapeHtml(stats.filterExpression)}</span>
+          <span class="stats-filter-count">(${stats.filteredMessages} of ${stats.totalMessages} messages match)</span>
+        </div>
+      `;
+      filterActionsHtml = `
+        <div class="stats-filter-actions">
+          <button type="button" class="stats-action-btn" id="downloadFilteredBtn">
+            <span class="stats-action-icon">&#11015;</span>
+            Download Filtered Messages (.hl7)
+          </button>
+          <button type="button" class="stats-action-btn" id="viewFilteredBtn">
+            <span class="stats-action-icon">&#128065;</span>
+            View Filtered Messages
+          </button>
+        </div>
+      `;
+    }
+
+    // Determine the message count to display (filtered or total)
+    const displayMessageCount = stats.filterApplied ? stats.filteredMessages : stats.totalMessages;
+
     // Build the stats HTML
     let html = `
       <div class="stats-header">
         <h2>Statistics for ${escapeHtml(fieldRef.toUpperCase())}</h2>
+        ${filterInfoHtml}
+        ${filterActionsHtml}
       </div>
 
       <div class="stats-summary">
@@ -414,13 +884,19 @@ const HL7Stats = (function() {
           <div class="stats-summary-value">${stats.totalMessages}</div>
           <div class="stats-summary-label">Total Messages</div>
         </div>
+        ${stats.filterApplied ? `
+        <div class="stats-summary-card stats-card-filtered">
+          <div class="stats-summary-value">${stats.filteredMessages}</div>
+          <div class="stats-summary-label">Filtered Messages</div>
+        </div>
+        ` : ''}
         <div class="stats-summary-card stats-card-success">
           <div class="stats-summary-value">${stats.messagesWithValue}</div>
-          <div class="stats-summary-label">Messages with Value</div>
+          <div class="stats-summary-label">With Value</div>
         </div>
         <div class="stats-summary-card stats-card-warning">
           <div class="stats-summary-value">${stats.messagesWithoutValue}</div>
-          <div class="stats-summary-label">Messages without Value</div>
+          <div class="stats-summary-label">Without Value</div>
         </div>
         <div class="stats-summary-card">
           <div class="stats-summary-value">${stats.distinctValues.length}</div>
@@ -470,10 +946,217 @@ const HL7Stats = (function() {
       </div>
     `;
 
+    // Add filtered messages viewer section if filter is applied
+    if (stats.filterApplied) {
+      html += `
+        <div class="stats-filtered-viewer" id="filteredMessagesViewer" style="display: none;">
+          <div class="stats-filtered-header">
+            <h3>Filtered Messages (${stats.filteredMessages})</h3>
+            <div class="stats-filtered-controls">
+              <div class="view-toggle">
+                <label class="toggle-option">
+                  <input type="radio" name="filteredViewMode" value="collapsed" checked>
+                  <span class="toggle-btn">Tree View</span>
+                </label>
+                <label class="toggle-option">
+                  <input type="radio" name="filteredViewMode" value="standard">
+                  <span class="toggle-btn">Textual View</span>
+                </label>
+              </div>
+              <button type="button" class="stats-close-viewer-btn" id="closeFilteredViewerBtn">&#10005; Close</button>
+            </div>
+          </div>
+          <div class="stats-filtered-content">
+            <div class="hl7-container" id="filteredMessagesContainer"></div>
+          </div>
+        </div>
+      `;
+    }
+
     container.innerHTML = html;
 
     // Create the pie chart
     createPieChart(stats, 'statsPieChart');
+
+    // Set up filtered messages functionality if filter is applied
+    if (stats.filterApplied && stats.filteredHL7Content) {
+      setupFilteredMessagesHandlers(stats.filteredHL7Content, stats.filteredMessages);
+    }
+  }
+
+  /**
+   * Render filter-only view (no field analysis)
+   */
+  function renderFilterOnlyView(stats, containerId) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    // Build filter info
+    let filterInfoHtml = '';
+    if (stats.filterApplied) {
+      filterInfoHtml = `
+        <div class="stats-filter-info">
+          <span class="stats-filter-label">Filter Applied:</span>
+          <span class="stats-filter-expression">${escapeHtml(stats.filterExpression)}</span>
+          <span class="stats-filter-count">(${stats.filteredMessages} of ${stats.totalMessages} messages match)</span>
+        </div>
+      `;
+    }
+
+    // Filter actions
+    const filterActionsHtml = stats.filterApplied ? `
+      <div class="stats-filter-actions">
+        <button type="button" class="stats-action-btn" id="downloadFilteredBtn">
+          <span class="stats-action-icon">&#11015;</span>
+          Download Filtered Messages (.hl7)
+        </button>
+        <button type="button" class="stats-action-btn" id="viewFilteredBtn">
+          <span class="stats-action-icon">&#128065;</span>
+          View Filtered Messages
+        </button>
+      </div>
+    ` : '';
+
+    let html = `
+      <div class="stats-header">
+        <h2>Filtered Results</h2>
+        ${filterInfoHtml}
+        ${filterActionsHtml}
+      </div>
+
+      <div class="stats-summary stats-summary-compact">
+        <div class="stats-summary-card">
+          <div class="stats-summary-value">${stats.totalMessages}</div>
+          <div class="stats-summary-label">Total Messages</div>
+        </div>
+        ${stats.filterApplied ? `
+        <div class="stats-summary-card stats-card-filtered">
+          <div class="stats-summary-value">${stats.filteredMessages}</div>
+          <div class="stats-summary-label">Filtered Messages</div>
+        </div>
+        ` : ''}
+      </div>
+
+      <div class="stats-filter-only-hint">
+        <p>Enter a field reference in "Field to Analyze" to see detailed statistics and visualizations.</p>
+      </div>
+    `;
+
+    // Add filtered messages viewer section if filter is applied
+    if (stats.filterApplied) {
+      html += `
+        <div class="stats-filtered-viewer" id="filteredMessagesViewer" style="display: none;">
+          <div class="stats-filtered-header">
+            <h3>Filtered Messages (${stats.filteredMessages})</h3>
+            <div class="stats-filtered-controls">
+              <div class="view-toggle">
+                <label class="toggle-option">
+                  <input type="radio" name="filteredViewMode" value="collapsed" checked>
+                  <span class="toggle-btn">Tree View</span>
+                </label>
+                <label class="toggle-option">
+                  <input type="radio" name="filteredViewMode" value="standard">
+                  <span class="toggle-btn">Textual View</span>
+                </label>
+              </div>
+              <button type="button" class="stats-close-viewer-btn" id="closeFilteredViewerBtn">&#10005; Close</button>
+            </div>
+          </div>
+          <div class="stats-filtered-content">
+            <div class="hl7-container" id="filteredMessagesContainer"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+
+    // Set up filtered messages functionality if filter is applied
+    if (stats.filterApplied && stats.filteredHL7Content) {
+      setupFilteredMessagesHandlers(stats.filteredHL7Content, stats.filteredMessages);
+    }
+  }
+
+  /**
+   * Set up event handlers for filtered messages download and view
+   */
+  function setupFilteredMessagesHandlers(filteredHL7Content, messageCount) {
+    const downloadBtn = document.getElementById('downloadFilteredBtn');
+    const viewBtn = document.getElementById('viewFilteredBtn');
+    const viewer = document.getElementById('filteredMessagesViewer');
+    const closeBtn = document.getElementById('closeFilteredViewerBtn');
+    const container = document.getElementById('filteredMessagesContainer');
+    const viewModeRadios = document.querySelectorAll('input[name="filteredViewMode"]');
+
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', function() {
+        downloadFilteredMessages(filteredHL7Content);
+      });
+    }
+
+    if (viewBtn && viewer && container) {
+      viewBtn.addEventListener('click', function() {
+        viewer.style.display = 'block';
+        const viewMode = document.querySelector('input[name="filteredViewMode"]:checked').value;
+        renderFilteredMessages(container, filteredHL7Content, viewMode);
+        viewer.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+    }
+
+    if (closeBtn && viewer) {
+      closeBtn.addEventListener('click', function() {
+        viewer.style.display = 'none';
+      });
+    }
+
+    if (viewModeRadios && container) {
+      viewModeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+          if (viewer.style.display !== 'none') {
+            renderFilteredMessages(container, filteredHL7Content, this.value);
+          }
+        });
+      });
+    }
+
+    // Set up tree click handler for the filtered messages container
+    if (container) {
+      container.addEventListener('click', function(e) {
+        if (typeof HL7Parser !== 'undefined' && HL7Parser.handleTreeClick) {
+          HL7Parser.handleTreeClick(e);
+        }
+      });
+    }
+  }
+
+  /**
+   * Download filtered messages as .hl7 file
+   */
+  function downloadFilteredMessages(content) {
+    const blob = new Blob([content], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'filtered_messages_' + new Date().toISOString().slice(0, 10) + '.hl7';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Render filtered messages in the viewer
+   */
+  function renderFilteredMessages(container, content, viewMode) {
+    if (typeof HL7Parser !== 'undefined' && HL7Parser.renderContent) {
+      HL7Parser.renderContent(container, content, {
+        viewMode: viewMode,
+        hideEmptyFields: false,
+        messagesPerBatch: 1000 // Show all messages
+      });
+    } else {
+      container.innerHTML = '<pre>' + escapeHtml(content) + '</pre>';
+    }
   }
 
   /**
@@ -496,7 +1179,7 @@ const HL7Stats = (function() {
   /**
    * Main function to run statistics on content
    */
-  function runStatistics(content, fieldRef, resultContainerId) {
+  function runStatistics(content, fieldRef, resultContainerId, filtersConfig) {
     if (!content || !content.trim()) {
       const container = document.getElementById(resultContainerId);
       if (container) {
@@ -505,7 +1188,7 @@ const HL7Stats = (function() {
       return;
     }
 
-    const extraction = extractFieldValues(content, fieldRef);
+    const extraction = extractFieldValues(content, fieldRef, filtersConfig);
     const stats = generateStatistics(extraction);
     renderStatistics(stats, fieldRef, resultContainerId);
   }

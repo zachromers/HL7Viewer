@@ -99,11 +99,68 @@
         <div class="stats-input-section">
           <div class="stats-input-header">
             <h2>Field Statistics</h2>
-            <p>Enter an HL7 field reference to generate statistics across all loaded messages.</p>
+            <p>Enter an HL7 field reference to generate statistics. Optionally filter messages first.</p>
           </div>
           <div class="stats-input-form">
+            <div class="stats-filters-section">
+              <div class="stats-filters-header">
+                <label>
+                  Filters (optional):
+                  <span class="stats-info-icon" id="filterInfoIcon">&#9432;
+                    <div class="stats-info-popup">
+                      <h4>Filter Syntax</h4>
+                      <p>Filter messages before generating statistics using the format:<br><code>FIELD OPERATOR VALUE</code></p>
+                      <h4>Operators</h4>
+                      <table class="stats-info-table">
+                        <tr><td><code>=</code></td><td>Equals (exact match)</td><td><code>PV1.2 = E</code></td></tr>
+                        <tr><td><code>!=</code></td><td>Not equals</td><td><code>PV1.2 != I</code></td></tr>
+                        <tr><td><code>contains</code></td><td>Contains substring</td><td><code>PV1.3 contains ER</code></td></tr>
+                        <tr><td><code>!contains</code></td><td>Does not contain</td><td><code>PV1.3 !contains ICU</code></td></tr>
+                      </table>
+                      <h4>Field Format</h4>
+                      <p>Use standard HL7 notation:</p>
+                      <ul>
+                        <li><code>PV1.2</code> - Segment.Field</li>
+                        <li><code>PID.5.1</code> - Segment.Field.Component</li>
+                        <li><code>PID.3.4.1</code> - Segment.Field.Component.Subcomponent</li>
+                      </ul>
+                      <p class="stats-info-note">Comparisons are case-insensitive.</p>
+                    </div>
+                  </span>
+                </label>
+              </div>
+              <div class="stats-filters-list" id="statsFiltersList">
+                <div class="stats-filter-row" data-filter-id="1">
+                  <span class="stats-filter-label">F1</span>
+                  <input type="text" class="stats-field-input stats-filter-input" placeholder="e.g., PV1.2 = E">
+                  <button type="button" class="stats-filter-remove-btn" title="Remove filter" style="visibility: hidden;">&#10005;</button>
+                </div>
+              </div>
+              <button type="button" id="addFilterBtn" class="stats-add-filter-btn">+ Add Filter</button>
+              <div class="stats-filter-logic" id="filterLogicSection" style="display: none;">
+                <label>Filter Logic:</label>
+                <div class="stats-logic-options">
+                  <label class="stats-logic-option">
+                    <input type="radio" name="filterLogic" value="AND" checked>
+                    <span>AND (all must match)</span>
+                  </label>
+                  <label class="stats-logic-option">
+                    <input type="radio" name="filterLogic" value="OR">
+                    <span>OR (any must match)</span>
+                  </label>
+                  <label class="stats-logic-option">
+                    <input type="radio" name="filterLogic" value="custom">
+                    <span>Custom</span>
+                  </label>
+                </div>
+                <div class="stats-custom-logic" id="customLogicSection" style="display: none;">
+                  <input type="text" id="customLogicInput" class="stats-field-input" placeholder="e.g., F1 AND (F2 OR F3)">
+                  <p class="stats-custom-logic-hint">Use filter labels (F1, F2, etc.) with AND, OR, and parentheses</p>
+                </div>
+              </div>
+            </div>
             <div class="stats-input-group">
-              <label for="statsFieldInput">Field Reference:</label>
+              <label for="statsFieldInput">Field to Analyze:</label>
               <input type="text" id="statsFieldInput" class="stats-field-input" placeholder="e.g., FT1.13, PID.5, MSH.9.1">
             </div>
             <button id="statsGenerateBtn" class="stats-generate-btn">Generate Statistics</button>
@@ -112,7 +169,8 @@
         <div id="statsResults" class="stats-results">
           <div class="stats-no-content">
             <p>Enter a field reference above and click "Generate Statistics"</p>
-            <p class="stats-hint">Examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
+            <p class="stats-hint">Field examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
+            <p class="stats-hint">Filter examples: PV1.2 = E (equals), PV1.2 != I (not equals), PV1.3 contains ER (contains)</p>
           </div>
         </div>
       </div>
