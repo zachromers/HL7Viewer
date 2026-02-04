@@ -120,6 +120,8 @@
                         <tr><td><code>!=</code></td><td>Not equals</td><td><code>PV1.2 != I</code></td></tr>
                         <tr><td><code>contains</code></td><td>Contains substring</td><td><code>PV1.3 contains ER</code></td></tr>
                         <tr><td><code>!contains</code></td><td>Does not contain</td><td><code>PV1.3 !contains ICU</code></td></tr>
+                        <tr><td><code>exists</code></td><td>Field has a value</td><td><code>PID.5 exists</code></td></tr>
+                        <tr><td><code>!exists</code></td><td>Field is empty/missing</td><td><code>PV1.44 !exists</code></td></tr>
                       </table>
                       <h4>Field Format</h4>
                       <p>Use standard HL7 notation:</p>
@@ -158,8 +160,8 @@
                   </label>
                 </div>
                 <div class="stats-custom-logic" id="customLogicSection" style="display: none;">
-                  <input type="text" id="customLogicInput" class="stats-field-input" placeholder="e.g., F1 AND (F2 OR F3)">
-                  <p class="stats-custom-logic-hint">Use filter labels (F1, F2, etc.) with AND, OR, and parentheses</p>
+                  <input type="text" id="customLogicInput" class="stats-field-input" placeholder="e.g., F1 AND (F2 OR F3), F1 AND NOT F2">
+                  <p class="stats-custom-logic-hint">Use filter labels (F1, F2, etc.) with AND, OR, NOT, and parentheses</p>
                 </div>
               </div>
             </div>
@@ -174,7 +176,7 @@
           <div class="stats-no-content">
             <p>Add filters and/or a field to analyze, then click "Evaluate"</p>
             <p class="stats-hint">Field examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
-            <p class="stats-hint">Filter examples: PV1.2 = E (equals), PV1.2 != I (not equals), PV1.3 contains ER (contains)</p>
+            <p class="stats-hint">Filter examples: PV1.2 = E (equals), PV1.2 != I (not equals), PV1.3 contains ER (contains), PID.5 exists</p>
           </div>
         </div>
       </div>

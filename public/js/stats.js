@@ -5,7 +5,7 @@ const HL7Stats = (function() {
   'use strict';
 
   /**
-   * Parse a filter expression like "PV1.2 = E" or "PV1.2 != E"
+   * Parse a filter expression like "PV1.2 = E", "PV1.2 != E", or "PID.5 exists"
    * Returns { fieldRef, operator, value } or null if invalid
    */
   function parseFilterExpression(filterExpr) {
@@ -13,6 +13,20 @@ const HL7Stats = (function() {
 
     const trimmed = filterExpr.trim();
     if (!trimmed) return null;
+
+    // Support unary operators (no value): exists, !exists
+    const unaryMatch = trimmed.match(/^(.+?)\s+(!exists|exists)\s*$/i);
+    if (unaryMatch) {
+      const fieldRef = unaryMatch[1].trim();
+      const op = unaryMatch[2].toLowerCase();
+      if (fieldRef && parseFieldReference(fieldRef)) {
+        return {
+          fieldRef: fieldRef,
+          operator: op,
+          value: ''
+        };
+      }
+    }
 
     // Support operators: =, !=, contains, !contains
     const operators = ['!=', '=', '!contains', 'contains'];
@@ -46,8 +60,8 @@ const HL7Stats = (function() {
     // Find the segment in this message
     const segment = messageSegments.find(s => s.segmentId === parsed.segment);
     if (!segment) {
-      // Segment not found - for = operator, this doesn't match; for != it does
-      return filter.operator === '!=' || filter.operator === '!contains';
+      // Segment not found - negation operators match, positive operators don't
+      return filter.operator === '!=' || filter.operator === '!contains' || filter.operator === '!exists';
     }
 
     // Extract the field value
@@ -72,6 +86,10 @@ const HL7Stats = (function() {
         return fieldValue.includes(filterValue);
       case '!contains':
         return !fieldValue.includes(filterValue);
+      case 'exists':
+        return fieldValue.length > 0;
+      case '!exists':
+        return fieldValue.length === 0;
       default:
         return true;
     }
@@ -164,8 +182,8 @@ const HL7Stats = (function() {
       normalized = normalized.replace(regex, 'X');
     });
 
-    // Replace AND/OR with placeholders
-    normalized = normalized.replace(/\bAND\b/g, '&').replace(/\bOR\b/g, '|');
+    // Replace AND/OR/NOT with placeholders
+    normalized = normalized.replace(/\bAND\b/g, '&').replace(/\bOR\b/g, '|').replace(/\bNOT\b/g, '!');
 
     // Remove spaces and parentheses for final check
     const simplified = normalized.replace(/[\s()]/g, '');
@@ -179,15 +197,15 @@ const HL7Stats = (function() {
       };
     }
 
-    // Valid pattern should only contain: X (filter placeholders), & (AND), | (OR)
-    // Pattern: should be alternating X and operators, like X&X|X or X&(X|X)
-    if (!/^[X&|]+$/.test(simplified)) {
+    // Valid pattern should only contain: X (filter placeholders), & (AND), | (OR), ! (NOT)
+    // Pattern: should be alternating X and operators, like X&X|X or X&(X|X) or X&!X
+    if (!/^[X&|!]+$/.test(simplified)) {
       // Find what's invalid
-      const invalidChars = simplified.replace(/[X&|]/g, '');
+      const invalidChars = simplified.replace(/[X&|!]/g, '');
       if (invalidChars) {
         return {
           valid: false,
-          error: `Invalid characters or words in expression. Use only filter labels (${availableLabels.join(', ')}), AND, OR, and parentheses.`
+          error: `Invalid characters or words in expression. Use only filter labels (${availableLabels.join(', ')}), AND, OR, NOT, and parentheses.`
         };
       }
     }
@@ -196,11 +214,17 @@ const HL7Stats = (function() {
     if (/^[&|]/.test(simplified)) {
       return { valid: false, error: 'Expression cannot start with AND/OR' };
     }
-    if (/[&|]$/.test(simplified)) {
-      return { valid: false, error: 'Expression cannot end with AND/OR' };
+    if (/[&|!]$/.test(simplified)) {
+      return { valid: false, error: 'Expression cannot end with AND/OR/NOT' };
     }
     if (/[&|]{2,}/.test(simplified)) {
       return { valid: false, error: 'Cannot have consecutive AND/OR operators' };
+    }
+    if (/![&|]/.test(simplified)) {
+      return { valid: false, error: 'NOT must be followed by a filter label, not AND/OR' };
+    }
+    if (/X!/.test(simplified)) {
+      return { valid: false, error: 'Missing AND/OR between filter label and NOT' };
     }
     if (/XX/.test(simplified)) {
       return { valid: false, error: 'Missing AND/OR between filter labels' };
@@ -210,7 +234,7 @@ const HL7Stats = (function() {
   }
 
   /**
-   * Evaluate custom logic expression like "F1 AND (F2 OR F3)"
+   * Evaluate custom logic expression like "F1 AND (F2 OR F3)" or "F1 AND NOT F2"
    */
   function evaluateCustomLogic(expression, filterResults) {
     try {
@@ -225,11 +249,11 @@ const HL7Stats = (function() {
         evalExpr = evalExpr.replace(regex, filterResults[label] ? 'true' : 'false');
       });
 
-      // Replace AND/OR with JavaScript operators
-      evalExpr = evalExpr.replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||');
+      // Replace AND/OR/NOT with JavaScript operators
+      evalExpr = evalExpr.replace(/\bAND\b/g, '&&').replace(/\bOR\b/g, '||').replace(/\bNOT\b/g, '!');
 
       // Validate that only allowed characters remain
-      if (!/^[truefalse&|() ]+$/i.test(evalExpr)) {
+      if (!/^[truefalse&|!() ]+$/i.test(evalExpr)) {
         console.warn('Invalid custom logic expression after substitution:', evalExpr);
         return true;
       }
@@ -415,7 +439,7 @@ const HL7Stats = (function() {
       });
 
       if (invalidFilters.length > 0) {
-        return { error: `Invalid filter format for ${invalidFilters.join(', ')}. Use format like "PV1.2 = E" or "PV1.2 != E" or "PV1.2 contains E"` };
+        return { error: `Invalid filter format for ${invalidFilters.join(', ')}. Use format like "PV1.2 = E", "PV1.2 != E", "PV1.2 contains E", or "PV1.2 exists"` };
       }
 
       // Validate custom logic expression if used
