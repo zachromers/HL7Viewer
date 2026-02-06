@@ -521,8 +521,8 @@ const HL7Stats = (function() {
           } else {
             return seg.segmentId + seg.fieldSeparator + seg.fields.join(seg.fieldSeparator);
           }
-        }).join('\r\n');
-      }).join('\r\n\r\n');
+        }).join('\r');
+      }).join('\r\r\n');
     }
 
     return {
