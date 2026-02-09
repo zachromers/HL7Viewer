@@ -342,6 +342,16 @@
     }
   });
 
+  // Auto-load content when pasted
+  textInput.addEventListener('paste', function() {
+    // Use setTimeout so the textarea value is updated with pasted content first
+    setTimeout(function() {
+      if (textInput.value.trim()) {
+        loadContent(textInput.value);
+      }
+    }, 0);
+  });
+
   // ========================================
   // DRAG AND DROP
   // ========================================
