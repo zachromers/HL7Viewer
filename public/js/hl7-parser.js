@@ -1443,6 +1443,43 @@ const HL7Parser = (function() {
   }
 
   /**
+   * Convert a Python-style JSON path to PostgreSQL JSON operator format
+   */
+  function convertToPostgresqlPath(pythonPath) {
+    const segmentRegex = /\['([^']+)'\]|\[(\d+)\]/g;
+    const segments = [];
+    let match;
+
+    while ((match = segmentRegex.exec(pythonPath)) !== null) {
+      if (match[1] !== undefined) {
+        segments.push({ type: 'key', value: match[1] });
+      } else if (match[2] !== undefined) {
+        segments.push({ type: 'index', value: parseInt(match[2], 10) });
+      }
+    }
+
+    if (segments.length === 0) return '';
+
+    // First segment is the column name
+    const columnName = segments[0].type === 'key' ? segments[0].value : segments[0].value.toString();
+    if (segments.length === 1) return columnName;
+
+    const parts = [];
+    for (let i = 1; i < segments.length; i++) {
+      const segment = segments[i];
+      const isLast = i === segments.length - 1;
+      const op = isLast ? '->>' : '->';
+      if (segment.type === 'key') {
+        parts.push(`${op} '${segment.value}'`);
+      } else {
+        parts.push(`${op} ${segment.value}`);
+      }
+    }
+
+    return columnName + ' ' + parts.join(' ');
+  }
+
+  /**
    * Setup custom context menu for JSON elements
    */
   function setupJSONContextMenu(container) {
@@ -1464,6 +1501,10 @@ const HL7Parser = (function() {
       <div class="json-context-menu-item" data-action="copy-java-path">
         <span class="json-context-menu-icon">&#9749;</span>
         Copy Java path
+      </div>
+      <div class="json-context-menu-item" data-action="copy-postgresql-path">
+        <span class="json-context-menu-icon">&#128028;</span>
+        Copy PostgreSQL path
       </div>
     `;
     document.body.appendChild(contextMenu);
@@ -1508,6 +1549,10 @@ const HL7Parser = (function() {
           const javaPath = convertToJavaPath(currentPath, currentValueType);
           copyToClipboard(javaPath);
           showCopyNotification('Java path copied to clipboard!');
+        } else if (menuItem.dataset.action === 'copy-postgresql-path') {
+          const pgPath = convertToPostgresqlPath(currentPath);
+          copyToClipboard(pgPath);
+          showCopyNotification('PostgreSQL path copied to clipboard!');
         }
       }
       contextMenu.style.display = 'none';
