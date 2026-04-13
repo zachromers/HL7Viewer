@@ -51,6 +51,17 @@
             <span class="checkbox-label">Hide Empty Fields</span>
           </label>
         </div>
+        <div class="control-group json-only-control" id="jsonSearchGroup" style="display: none;">
+          <label class="control-label" for="jsonSearchInput">Search:</label>
+          <input type="text" id="jsonSearchInput" class="json-search-input" placeholder="keys or values...">
+          <button type="button" id="jsonSearchPrevBtn" class="json-search-btn json-search-nav-btn" title="Previous match (Shift+Enter)" disabled>&lsaquo;</button>
+          <button type="button" id="jsonSearchNextBtn" class="json-search-btn json-search-nav-btn" title="Next match (Enter)" disabled>&rsaquo;</button>
+          <span id="jsonSearchCount" class="json-search-count"></span>
+        </div>
+        <div class="control-group json-only-control" id="jsonTreeControlsGroup" style="display: none;">
+          <button type="button" id="jsonExpandAllBtn" class="json-search-btn" title="Expand all tree nodes">Expand All</button>
+          <button type="button" id="jsonCollapseAllBtn" class="json-search-btn" title="Collapse all tree nodes">Collapse All</button>
+        </div>
         <div class="control-group viewer-only-control">
           <label class="control-label" for="messagesPerBatch">Batch Size:</label>
           <select id="messagesPerBatch" class="select-control">

@@ -16,6 +16,13 @@
   const inputArea = document.getElementById('inputArea');
   const viewerContainer = document.getElementById('viewerContainer');
   const viewerArea = document.getElementById('viewerArea');
+  const jsonSearchGroup = document.getElementById('jsonSearchGroup');
+  const jsonSearchInput = document.getElementById('jsonSearchInput');
+  const jsonSearchPrevBtn = document.getElementById('jsonSearchPrevBtn');
+  const jsonSearchNextBtn = document.getElementById('jsonSearchNextBtn');
+  const jsonTreeControlsGroup = document.getElementById('jsonTreeControlsGroup');
+  const jsonExpandAllBtn = document.getElementById('jsonExpandAllBtn');
+  const jsonCollapseAllBtn = document.getElementById('jsonCollapseAllBtn');
 
   // DOM Elements - Page Mode
   const pageModeRadios = document.querySelectorAll('input[name="pageMode"]');
@@ -178,13 +185,59 @@
    * Render the current content with current settings
    */
   function renderCurrentContent() {
+    // Re-render rebuilds the DOM, so any prior search state is stale.
+    HL7Parser.clearJSONSearch(viewerContainer);
+
     if (!currentContent) {
       viewerContainer.innerHTML = '<div class="welcome-message"><p>Upload a file or paste content to view HL7/JSON data</p></div>';
       viewerContainer.className = 'hl7-container';
+      if (jsonSearchGroup) jsonSearchGroup.style.display = 'none';
+      if (jsonTreeControlsGroup) jsonTreeControlsGroup.style.display = 'none';
+      if (jsonSearchInput) jsonSearchInput.value = '';
       return;
     }
 
-    HL7Parser.renderContent(viewerContainer, currentContent, getSettings());
+    const settings = getSettings();
+    HL7Parser.renderContent(viewerContainer, currentContent, settings);
+
+    // Show the search box only when the rendered content is JSON.
+    const isJSON = HL7Parser.detectContentType(currentContent) === 'json';
+    if (jsonSearchGroup) {
+      jsonSearchGroup.style.display = isJSON ? '' : 'none';
+    }
+    if (jsonTreeControlsGroup) {
+      jsonTreeControlsGroup.style.display = (isJSON && settings.viewMode === 'collapsed') ? '' : 'none';
+    }
+    if (!isJSON && jsonSearchInput) {
+      jsonSearchInput.value = '';
+    }
+  }
+
+  function setAllJSONTreeNodes(expand) {
+    const headers = viewerContainer.querySelectorAll('.json-collapsed-view .hl7-tree-header');
+    headers.forEach(function(header) {
+      const content = header.nextElementSibling;
+      if (!content || !content.classList.contains('hl7-tree-content')) return;
+      const toggle = header.querySelector('.hl7-tree-toggle');
+      if (expand) {
+        header.classList.remove('collapsed');
+        header.classList.add('expanded');
+        content.style.display = 'block';
+        if (toggle) toggle.innerHTML = '\u25BC';
+      } else {
+        header.classList.remove('expanded');
+        header.classList.add('collapsed');
+        content.style.display = 'none';
+        if (toggle) toggle.innerHTML = '\u25B6';
+      }
+    });
+  }
+
+  if (jsonExpandAllBtn) {
+    jsonExpandAllBtn.addEventListener('click', function() { setAllJSONTreeNodes(true); });
+  }
+  if (jsonCollapseAllBtn) {
+    jsonCollapseAllBtn.addEventListener('click', function() { setAllJSONTreeNodes(false); });
   }
 
   /**
@@ -203,6 +256,7 @@
     }
 
     currentContent = content;
+    if (jsonSearchInput) jsonSearchInput.value = '';
     renderCurrentContent();
 
     // Collapse input area after successful load
@@ -320,6 +374,52 @@
       renderCurrentContent();
     }
   });
+
+  // JSON search handlers
+  let lastSearchedQuery = '';
+
+  function runJSONSearch() {
+    const q = jsonSearchInput.value.trim();
+    lastSearchedQuery = q;
+    HL7Parser.performJSONSearch(viewerContainer, q);
+  }
+
+  if (jsonSearchPrevBtn) {
+    jsonSearchPrevBtn.addEventListener('click', function() {
+      HL7Parser.navigateJSONSearch(viewerContainer, -1);
+    });
+  }
+  if (jsonSearchNextBtn) {
+    jsonSearchNextBtn.addEventListener('click', function() {
+      HL7Parser.navigateJSONSearch(viewerContainer, 1);
+    });
+  }
+  if (jsonSearchInput) {
+    jsonSearchInput.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const current = jsonSearchInput.value.trim();
+      if (!current) {
+        HL7Parser.clearJSONSearch(viewerContainer);
+        lastSearchedQuery = '';
+        return;
+      }
+      // Re-run the search if the query text changed OR if the previous
+      // search state was wiped by a re-render (view mode / settings change).
+      const hasActiveMatches = !!viewerContainer.querySelector('.json-search-match');
+      if (current !== lastSearchedQuery || !hasActiveMatches) {
+        runJSONSearch();
+      } else {
+        HL7Parser.navigateJSONSearch(viewerContainer, e.shiftKey ? -1 : 1);
+      }
+    });
+    jsonSearchInput.addEventListener('input', function() {
+      if (jsonSearchInput.value === '') {
+        HL7Parser.clearJSONSearch(viewerContainer);
+        lastSearchedQuery = '';
+      }
+    });
+  }
 
   // Clear button
   clearBtn.addEventListener('click', clearViewer);

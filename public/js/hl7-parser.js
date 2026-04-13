@@ -1641,13 +1641,183 @@ const HL7Parser = (function() {
     }, 2000);
   }
 
+  // ========================================
+  // JSON SEARCH
+  // ========================================
+
+  // Module-level state so clear() can undo exactly what search() did.
+  let jsonSearchState = {
+    autoExpandedHeaders: [],
+    highlightedElements: [],
+    currentIndex: -1,
+    query: ''
+  };
+
+  function updateSearchNavButtons() {
+    const prevBtn = document.getElementById('jsonSearchPrevBtn');
+    const nextBtn = document.getElementById('jsonSearchNextBtn');
+    const hasMatches = jsonSearchState.highlightedElements.length > 0;
+    if (prevBtn) prevBtn.disabled = !hasMatches;
+    if (nextBtn) nextBtn.disabled = !hasMatches;
+  }
+
+  function updateSearchCountDisplay() {
+    const countEl = document.getElementById('jsonSearchCount');
+    if (!countEl) return;
+    const total = jsonSearchState.highlightedElements.length;
+    if (!jsonSearchState.query) {
+      countEl.textContent = '';
+    } else if (total === 0) {
+      countEl.textContent = 'No matches';
+    } else {
+      countEl.textContent = (jsonSearchState.currentIndex + 1) + ' of ' + total;
+    }
+  }
+
+  // Expand the element's ancestor tree headers so it's visible.
+  // Records newly expanded headers so clearJSONSearch() can restore them.
+  function ensureMatchVisible(el, container) {
+    const ownHeader = el.closest('.hl7-tree-header');
+    if (ownHeader && ownHeader.classList.contains('collapsed')) {
+      expandHeader(ownHeader);
+      jsonSearchState.autoExpandedHeaders.push(ownHeader);
+    }
+    let node = el.parentElement;
+    while (node && node !== container) {
+      if (node.classList && node.classList.contains('hl7-tree-content')) {
+        const header = node.previousElementSibling;
+        if (header && header.classList.contains('hl7-tree-header') &&
+            header.classList.contains('collapsed')) {
+          expandHeader(header);
+          jsonSearchState.autoExpandedHeaders.push(header);
+        }
+      }
+      node = node.parentElement;
+    }
+  }
+
+  function setCurrentMatch(index, container) {
+    const matches = jsonSearchState.highlightedElements;
+    if (matches.length === 0) {
+      jsonSearchState.currentIndex = -1;
+      updateSearchCountDisplay();
+      return;
+    }
+    // Clear previous current marker.
+    if (jsonSearchState.currentIndex >= 0 &&
+        jsonSearchState.currentIndex < matches.length) {
+      matches[jsonSearchState.currentIndex].classList.remove('json-search-match-current');
+    }
+    // Wrap index.
+    const len = matches.length;
+    const next = ((index % len) + len) % len;
+    jsonSearchState.currentIndex = next;
+    const el = matches[next];
+    el.classList.add('json-search-match-current');
+    ensureMatchVisible(el, container);
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    updateSearchCountDisplay();
+  }
+
+  function navigateJSONSearch(container, direction) {
+    if (jsonSearchState.highlightedElements.length === 0) return;
+    setCurrentMatch(jsonSearchState.currentIndex + direction, container);
+  }
+
+  function expandHeader(header) {
+    header.classList.remove('collapsed');
+    header.classList.add('expanded');
+    const content = header.nextElementSibling;
+    if (content && content.classList.contains('hl7-tree-content')) {
+      content.style.display = 'block';
+    }
+    const toggle = header.querySelector('.hl7-tree-toggle');
+    if (toggle) toggle.innerHTML = '\u25BC';
+  }
+
+  function collapseHeader(header) {
+    header.classList.remove('expanded');
+    header.classList.add('collapsed');
+    const content = header.nextElementSibling;
+    if (content && content.classList.contains('hl7-tree-content')) {
+      content.style.display = 'none';
+    }
+    const toggle = header.querySelector('.hl7-tree-toggle');
+    if (toggle) toggle.innerHTML = '\u25B6';
+  }
+
+  function clearJSONSearch(container) {
+    jsonSearchState.highlightedElements.forEach(function(el) {
+      el.classList.remove('json-search-match');
+      el.classList.remove('json-search-match-current');
+    });
+    // Collapse in reverse so innermost headers restore first.
+    for (let i = jsonSearchState.autoExpandedHeaders.length - 1; i >= 0; i--) {
+      collapseHeader(jsonSearchState.autoExpandedHeaders[i]);
+    }
+    jsonSearchState.autoExpandedHeaders = [];
+    jsonSearchState.highlightedElements = [];
+    jsonSearchState.currentIndex = -1;
+    jsonSearchState.query = '';
+
+    const countEl = document.getElementById('jsonSearchCount');
+    if (countEl) countEl.textContent = '';
+    updateSearchNavButtons();
+  }
+
+  function performJSONSearch(container, query) {
+    clearJSONSearch(container);
+
+    if (!container || !query) {
+      updateSearchNavButtons();
+      return;
+    }
+
+    jsonSearchState.query = query;
+    const q = query.toLowerCase();
+
+    if (container.classList.contains('json-collapsed-view')) {
+      // Tree view: match against keys and primitive value spans.
+      const candidates = container.querySelectorAll('.json-tree-key, .json-tree-value');
+      candidates.forEach(function(el) {
+        if (el.textContent.toLowerCase().indexOf(q) === -1) return;
+        el.classList.add('json-search-match');
+        jsonSearchState.highlightedElements.push(el);
+        ensureMatchVisible(el, container);
+      });
+    } else if (container.classList.contains('json-standard-view')) {
+      // Standard view: match leaf-ish spans only (skip wrapper .json-array-item).
+      const selector = '.json-key, .json-string, .json-number, .json-boolean, .json-null';
+      const candidates = container.querySelectorAll(selector);
+      candidates.forEach(function(el) {
+        if (el.textContent.toLowerCase().indexOf(q) === -1) return;
+        el.classList.add('json-search-match');
+        jsonSearchState.highlightedElements.push(el);
+      });
+    } else {
+      updateSearchNavButtons();
+      return;
+    }
+
+    updateSearchNavButtons();
+
+    if (jsonSearchState.highlightedElements.length > 0) {
+      setCurrentMatch(0, container);
+    } else {
+      updateSearchCountDisplay();
+    }
+  }
+
   // Public API
   return {
     detectContentType: detectContentType,
     renderContent: renderContent,
     isJSONContent: isJSONContent,
     isHL7Content: isHL7Content,
-    handleTreeClick: handleTreeClick
+    handleTreeClick: handleTreeClick,
+    performJSONSearch: performJSONSearch,
+    navigateJSONSearch: navigateJSONSearch,
+    clearJSONSearch: clearJSONSearch
   };
 
 })();

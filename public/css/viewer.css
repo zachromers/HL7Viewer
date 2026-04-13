@@ -921,10 +921,96 @@
 }
 
 /* ========================================
+   JSON SEARCH HIGHLIGHTS
+   ======================================== */
+
+.json-search-match {
+  background-color: rgba(255, 213, 79, 0.35);
+  border-radius: 2px;
+  outline: 1px solid rgba(255, 213, 79, 0.7);
+}
+
+.json-search-match-current {
+  background-color: rgba(255, 152, 0, 0.55);
+  outline: 1px solid #ff9800;
+}
+
+.json-search-input {
+  padding: 5px 10px;
+  font-size: 13px;
+  background-color: #333333;
+  border: 1px solid #454545;
+  border-radius: 4px;
+  color: #cccccc;
+  width: 180px;
+}
+
+.json-search-input:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+.json-search-btn {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  background-color: #0e639c;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.json-search-btn:hover {
+  background-color: #1177bb;
+}
+
+.json-search-btn:disabled,
+.json-search-btn[disabled] {
+  background-color: #3c3c3c;
+  color: #777777;
+  cursor: not-allowed;
+}
+
+.json-search-nav-btn {
+  padding: 6px 10px;
+  font-size: 15px;
+  line-height: 1;
+  min-width: 28px;
+}
+
+.json-search-count {
+  font-size: 12px;
+  color: #9cdcfe;
+  min-width: 70px;
+}
+
+/* ========================================
    JSON LIGHT THEME
    ======================================== */
 
 @media (prefers-color-scheme: light) {
+  .json-search-match {
+    background-color: rgba(255, 213, 79, 0.55);
+    outline: 1px solid #f9a825;
+  }
+
+  .json-search-match-current {
+    background-color: rgba(255, 152, 0, 0.7);
+    outline: 1px solid #e65100;
+  }
+
+  .json-search-input {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .json-search-count {
+    color: #0066cc;
+  }
+
   .json-item-header {
     color: #0066cc;
     background-color: #f0f0f0;
