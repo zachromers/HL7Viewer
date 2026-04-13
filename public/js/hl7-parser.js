@@ -46,6 +46,13 @@ const HL7Parser = (function() {
     }
   }
 
+  function isSegmentLine(line, fieldSep) {
+    if (!line || line.length < 3) return false;
+    if (!/^[A-Z][A-Z0-9]{2}$/.test(line.substring(0, 3))) return false;
+    if (line.substring(0, 3) === 'MSH') return line.length >= 4;
+    return line.length === 3 || line[3] === fieldSep;
+  }
+
   /**
    * Check if the content appears to be HL7 formatted
    */
@@ -216,7 +223,7 @@ const HL7Parser = (function() {
 
         const segmentId = trimmedLine.substring(0, 3);
 
-        if (!HL7_SEGMENT_IDS.includes(segmentId)) {
+        if (!isSegmentLine(trimmedLine, fieldSeparator)) {
           // Non-HL7 line (comment or other)
           const lineDiv = document.createElement('div');
           lineDiv.className = 'hl7-line hl7-comment';
@@ -443,7 +450,7 @@ const HL7Parser = (function() {
         };
       }
 
-      if (currentMessage && HL7_SEGMENT_IDS.includes(segmentId)) {
+      if (currentMessage && isSegmentLine(trimmedLine, fieldSeparator)) {
         const parsed = parseSegment(trimmedLine, segmentId, fieldSeparator, componentSeparator, '~', subcomponentSeparator);
         currentMessage.segments.push({
           segmentId,

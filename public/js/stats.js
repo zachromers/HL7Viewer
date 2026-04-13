@@ -4,6 +4,13 @@
 const HL7Stats = (function() {
   'use strict';
 
+  function isSegmentLine(line, fieldSep) {
+    if (!line || line.length < 3) return false;
+    if (!/^[A-Z][A-Z0-9]{2}$/.test(line.substring(0, 3))) return false;
+    if (line.substring(0, 3) === 'MSH') return line.length >= 4;
+    return line.length === 3 || line[3] === fieldSep;
+  }
+
   /**
    * Parse a filter expression like "PV1.2 = E", "PV1.2 != E", or "PID.5 exists"
    * Returns { fieldRef, operator, value } or null if invalid
@@ -369,7 +376,7 @@ const HL7Stats = (function() {
         };
       }
 
-      if (currentMessage && HL7_SEGMENT_IDS.includes(segmentId)) {
+      if (currentMessage && isSegmentLine(trimmedLine, fieldSeparator)) {
         // Parse segment fields
         let fields;
         if (segmentId === 'MSH') {
