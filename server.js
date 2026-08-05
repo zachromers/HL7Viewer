@@ -1,9 +1,12 @@
 const express = require('express');
+const compression = require('compression');
 const path = require('path');
 
 const app = express();
 const PORT = 3003;
 const BASE_PATH = '/HL7';
+
+app.use(compression());
 
 // Serve static files from public directory at base path
 app.use(BASE_PATH, express.static(path.join(__dirname, 'public')));
