@@ -209,6 +209,7 @@ const HL7Parser = (function() {
         container.appendChild(separatorDiv);
       }
 
+      let segmentIndex = 0;
       for (const line of messageLines) {
         const trimmedLine = line.trim();
 
@@ -246,10 +247,13 @@ const HL7Parser = (function() {
           }
         }
 
+        segmentIndex++;
+
         // Create line container
         const lineDiv = document.createElement('div');
         lineDiv.className = 'hl7-line';
         lineDiv.dataset.segment = segmentId;
+        lineDiv.dataset.segmentIndex = segmentIndex;
 
         // Parse and render the segment
         const parsedSegment = parseSegment(
@@ -521,8 +525,8 @@ const HL7Parser = (function() {
     messageContent.className = 'hl7-tree-content';
     messageContent.style.display = 'none';
 
-    message.segments.forEach(segment => {
-      const segmentNode = createSegmentNode(segment, hideEmptyFields);
+    message.segments.forEach((segment, idx) => {
+      const segmentNode = createSegmentNode(segment, hideEmptyFields, idx + 1);
       messageContent.appendChild(segmentNode);
     });
 
@@ -534,7 +538,7 @@ const HL7Parser = (function() {
   /**
    * Create a segment node for the collapsed view
    */
-  function createSegmentNode(segment, hideEmptyFields) {
+  function createSegmentNode(segment, hideEmptyFields, segmentIndex) {
     const segmentDiv = document.createElement('div');
     segmentDiv.className = 'hl7-tree-segment';
 
@@ -548,6 +552,7 @@ const HL7Parser = (function() {
     const segmentHeader = document.createElement('div');
     segmentHeader.className = 'hl7-tree-header hl7-tree-segment-header collapsed';
     segmentHeader.dataset.segment = segment.segmentId;
+    if (segmentIndex) segmentHeader.dataset.segmentIndex = segmentIndex;
     segmentHeader.innerHTML = `
       <span class="hl7-tree-toggle">&#9654;</span>
       <span class="hl7-tree-segment-id">${segment.segmentId}</span>
