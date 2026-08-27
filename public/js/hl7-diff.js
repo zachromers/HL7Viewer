@@ -152,6 +152,27 @@ const HL7Diff = (function() {
     return segInfo ? segInfo.name : 'Custom / Unknown Segment';
   }
 
+  // Names that mean a field carries a date or time.
+  const DATE_NAME_PATTERN = /\b(date|time|datetime|dob)\b/i;
+
+  /**
+   * Whether a field is declared to hold a date/time by the HL7 spec table.
+   * Digit strings are only read as timestamps here; everywhere else an
+   * 8- or 14-digit run is just a number, so account numbers and record IDs
+   * are not mistaken for dates.
+   */
+  function isTimestampField(segmentId, fieldNum, compNum) {
+    const segInfo = (typeof HL7_SEGMENTS !== 'undefined') ? HL7_SEGMENTS[segmentId] : null;
+    if (!segInfo || !segInfo.fields) return false;
+    const fieldDef = segInfo.fields[fieldNum];
+    if (!fieldDef) return false;
+    if (compNum && fieldDef.components && fieldDef.components[compNum] &&
+        DATE_NAME_PATTERN.test(fieldDef.components[compNum])) {
+      return true;
+    }
+    return DATE_NAME_PATTERN.test(fieldDef.name || '');
+  }
+
   /** Strip occurrence and repetition indices: "PID.3[2].1" -> "PID.3.1". */
   function ruleAddress(addr) {
     return addr.replace(/\[\d+\]/g, '');
@@ -197,7 +218,7 @@ const HL7Diff = (function() {
    *   cls  - broad class used for high-severity type mismatches
    *   type - narrow type used for lower-severity format/precision notes
    */
-  function signature(value) {
+  function signature(value, allowTimestamp) {
     const v = value;
     if (!v) return { cls: 'empty', type: 'empty', length: 0, caseClass: 'none', label: 'empty' };
 
@@ -205,10 +226,12 @@ const HL7Diff = (function() {
     const cc = caseClass(v);
 
     // HL7 timestamp forms: YYYYMMDD[HHMM[SS[.S+]]][+/-ZZZZ]
-    // Recognized by structure alone. Whether the digits form a real calendar
-    // date is not this tool's business - what matters is that one message
-    // carries more precision than the other.
-    const tsMatch = v.match(/^(\d{8})(\d{2}(?:\d{2}(?:\d{2})?)?)?(\.\d{1,4})?([+-]\d{4})?$/);
+    // Matched by structure, not by calendar validity - whether the digits form
+    // a real date is not this tool's business. Only attempted for fields the
+    // spec declares as date/time, so numeric identifiers stay numeric.
+    const tsMatch = allowTimestamp
+      ? v.match(/^(\d{8})(\d{2}(?:\d{2}(?:\d{2})?)?)?(\.\d{1,4})?([+-]\d{4})?$/)
+      : null;
     if (tsMatch) {
       if (tsMatch[2] || tsMatch[3] || tsMatch[4]) {
         const precision = 8 + (tsMatch[2] ? tsMatch[2].length : 0);
@@ -410,12 +433,12 @@ const HL7Diff = (function() {
   function buildSegmentProfile(msg, segments) {
     const profile = { total: segments.length, leaves: {} };
     segments.forEach(function(seg) {
-      walkSegmentLeaves(msg, seg, function(key, value) {
+      walkSegmentLeaves(msg, seg, function(key, value, f, c) {
         if (!profile.leaves[key]) profile.leaves[key] = { populated: 0, classes: {}, values: [] };
         const leaf = profile.leaves[key];
         if (value) {
           leaf.populated++;
-          leaf.classes[signature(value).cls] = true;
+          leaf.classes[signature(value, isTimestampField(seg.segmentId, f, c)).cls] = true;
           // Keep the distinct values so the results can show what a finding
           // was actually measured against.
           if (leaf.values.indexOf(value) === -1 && leaf.values.length < 12) {
@@ -488,12 +511,13 @@ const HL7Diff = (function() {
           detail: 'Populated here, but empty in all ' + others + '.'
         });
       } else {
-        const cls = signature(value).cls;
+        const sig = signature(value, isTimestampField(segId, f, c));
+        const cls = sig.cls;
         if (!entry.classes[cls]) {
           verdicts.push({
             kind: 'shape',
             severity: 'high',
-            detail: 'This value is ' + describeSignature(signature(value)) +
+            detail: 'This value is ' + describeSignature(sig) +
                     ', but the ' + others + (profile.total === 1 ? ' uses ' : ' use ') +
                     classListOf(entry) + ' here.'
           });
@@ -538,7 +562,8 @@ const HL7Diff = (function() {
    * exclusive, since once the broad type differs the finer comparisons
    * (precision, case, padding) just describe the same difference again.
    */
-  function classifyLeaf(addr, rawA, rawB, ctx) {
+  function classifyLeaf(addr, rawA, rawB, ctx, segmentId, fieldNum, compNum) {
+    const allowTimestamp = isTimestampField(segmentId, fieldNum, compNum);
     const a = rawA == null ? '' : rawA;
     const b = rawB == null ? '' : rawB;
     const verdicts = [];
@@ -591,8 +616,8 @@ const HL7Diff = (function() {
       return verdicts;
     }
 
-    const sigA = signature(aT);
-    const sigB = signature(bT);
+    const sigA = signature(aT, allowTimestamp);
+    const sigB = signature(bT, allowTimestamp);
 
     if (sigA.cls !== sigB.cls) {
       verdicts.push({
@@ -687,7 +712,7 @@ const HL7Diff = (function() {
 
       if (!hasComps) {
         addRow(rows, fieldAddr, segmentId, occurrence, fieldNum, null, null, repA, repB,
-               classifyLeaf(fieldAddr, repA, repB, ctx));
+               classifyLeaf(fieldAddr, repA, repB, ctx, segmentId, fieldNum, null));
         continue;
       }
 
@@ -713,7 +738,7 @@ const HL7Diff = (function() {
 
         if (!hasSubs) {
           addRow(rows, compAddr, segmentId, occurrence, fieldNum, compNum, null, cA, cB,
-                 classifyLeaf(compAddr, cA, cB, ctx));
+                 classifyLeaf(compAddr, cA, cB, ctx, segmentId, fieldNum, compNum));
           continue;
         }
 
@@ -727,7 +752,7 @@ const HL7Diff = (function() {
           const subNum = s + 1;
           const subAddr = compAddr + '.' + subNum;
           addRow(rows, subAddr, segmentId, occurrence, fieldNum, compNum, subNum, sA, sB,
-                 classifyLeaf(subAddr, sA, sB, ctx));
+                 classifyLeaf(subAddr, sA, sB, ctx, segmentId, fieldNum, compNum));
         }
       }
     }
@@ -1313,6 +1338,7 @@ const HL7Diff = (function() {
     buildReport: buildReport,
     parseMessages: parseMessages,
     signature: signature,
+    isTimestampField: isTimestampField,
     handleGroupToggle: handleGroupToggle,
     setAllGroups: setAllGroups,
     getCollapsedGroups: getCollapsedGroups
