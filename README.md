@@ -93,6 +93,43 @@ Switch to the **Statistics** page to analyze loaded HL7 data:
 - View filtered messages in a separate viewer panel.
 - Download filtered messages as a `.hl7` file.
 
+### Message Comparison
+
+Switch to the **Compare** page to diff two HL7 messages and work out why one was accepted and another rejected.
+
+Paste or drop a message into each pane, then click **Compare Messages**. The comparison aligns the two messages segment by segment (matching repeated segments on their Set ID where present, otherwise in order) and walks every field, repetition, component, and subcomponent.
+
+This is not a text diff. Each difference is classified, so fields that are *expected* to vary between two otherwise-equivalent messages stay out of the way:
+
+| Verdict | Meaning | Severity |
+|---------|---------|----------|
+| Present in one only | Populated in one message, empty or absent in the other | High |
+| Type mismatch | The value changes class &mdash; e.g. numeric in one message, alphanumeric in the other | High |
+| Malformed data | Control characters, non-ASCII, stray whitespace, unterminated escape sequences, or an impossible calendar date on one side only | High |
+| Precision change | Date/time precision differs (e.g. `20240115` vs `20240115103000`) | Medium |
+| Value differs | Both populated, same type, different text | Medium |
+| Format / Case | Leading-zero padding or letter case only | Low |
+| Expected variance | A value difference on a field known to vary | Info |
+
+Alongside the field-by-field comparison it also reports message-level differences: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments that are truncated relative to their counterpart.
+
+Differences in `MSH.2`, `MSH.3`&ndash;`MSH.6`, `MSH.9`, `MSH.11`, and `MSH.12` are promoted to high severity with an explanation, since different routing, message type, processing ID, or HL7 version is a common reason two similar messages are handled differently.
+
+**Expected-variance rules**
+
+Patient IDs, timestamps, control IDs, order numbers, and similar fields ship with a default rule list. A plain value difference on those fields is filed under *Expected variance* and collapsed. Presence differences, type mismatches, and malformed data on those same fields are still reported in full &mdash; so a patient ID that is numeric in one message and alphanumeric in the other is flagged even though the ID itself is expected to differ.
+
+The list is editable under **Expected-Variance Rules** and is saved to LocalStorage. One rule per line, using `SEG.FIELD`, `SEG.FIELD.COMPONENT`, a bare `SEG`, or a wildcard such as `ZPD.*`. Any plain value difference in the results also carries an **Expect variance** button that adds its field to the list.
+
+**Results**
+
+- Summary chips: high, medium, low, expected variance, and identical counts.
+- A severity-ranked **Findings** list stating each difference in plain language.
+- **Field Detail** grouped by segment, showing both values side by side with the differing characters highlighted.
+- **Show Identical Fields** (menu bar) reveals fields that match.
+- **Copy Report** / **Download Report** produce a plain-text summary. The download is generated in-browser via a blob &mdash; nothing is uploaded.
+
+
 ### HL7 Segment Definitions
 
 The application includes comprehensive field definitions for 30+ HL7 segment types, including:
@@ -118,6 +155,8 @@ All settings persist across sessions via LocalStorage:
 | View Mode | Tree View / Textual View | Tree View |
 | Hide Empty Fields | On / Off | Off |
 | Batch Size | 20 / 50 / 100 | 20 |
+| Show Identical Fields (Compare) | On / Off | Off |
+| Expected-Variance Rules (Compare) | Editable field list | Built-in defaults |
 
 ## Project Structure
 
@@ -131,12 +170,14 @@ HL7Viewer/
     ├── HL7Favicon.png     # Favicon
     ├── css/
     │   ├── main.css       # Layout, theming, and global styles
-    │   └── viewer.css     # Viewer-specific styles and syntax colors
+    │   ├── viewer.css     # Viewer-specific styles and syntax colors
+    │   └── compare.css    # Compare page styles
     └── js/
         ├── app.js         # Main application logic, rendering, and UI
         ├── hl7-parser.js  # HL7/JSON parsing and content detection
         ├── hl7-fields.js  # HL7 segment/field/component definitions
-        └── stats.js       # Statistics, filtering, and chart generation
+        ├── stats.js       # Statistics, filtering, and chart generation
+        └── hl7-diff.js    # Message comparison engine and rendering
 ```
 
 ## Tech Stack

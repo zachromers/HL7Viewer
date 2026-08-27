@@ -27,6 +27,31 @@
   // DOM Elements - Page Mode
   const pageModeRadios = document.querySelectorAll('input[name="pageMode"]');
   const viewerOnlyControls = document.querySelectorAll('.viewer-only-control');
+  const compareOnlyControls = document.querySelectorAll('.compare-only-control');
+  const jsonOnlyControls = document.querySelectorAll('.json-only-control');
+
+  // DOM Elements - Compare
+  const comparePanel = document.getElementById('comparePanel');
+  const compareInputA = document.getElementById('compareInputA');
+  const compareInputB = document.getElementById('compareInputB');
+  const compareStatusA = document.getElementById('compareStatusA');
+  const compareStatusB = document.getElementById('compareStatusB');
+  const compareFileA = document.getElementById('compareFileA');
+  const compareFileB = document.getElementById('compareFileB');
+  const compareClearA = document.getElementById('compareClearA');
+  const compareClearB = document.getElementById('compareClearB');
+  const comparePaneA = document.getElementById('comparePaneA');
+  const comparePaneB = document.getElementById('comparePaneB');
+  const compareRunBtn = document.getElementById('compareRunBtn');
+  const compareSwapBtn = document.getElementById('compareSwapBtn');
+  const compareRulesToggle = document.getElementById('compareRulesToggle');
+  const compareRulesSection = document.getElementById('compareRulesSection');
+  const compareRulesInput = document.getElementById('compareRulesInput');
+  const compareRulesSaveBtn = document.getElementById('compareRulesSaveBtn');
+  const compareRulesResetBtn = document.getElementById('compareRulesResetBtn');
+  const compareRulesStatus = document.getElementById('compareRulesStatus');
+  const compareResults = document.getElementById('compareResults');
+  const compareShowIdentical = document.getElementById('compareShowIdentical');
 
   // DOM Elements - Statistics
   const statsPanel = document.getElementById('statsPanel');
@@ -99,34 +124,40 @@
   function setPageMode(mode) {
     currentPageMode = mode;
 
-    if (mode === 'viewer') {
-      // Show viewer, hide statistics
-      viewerArea.style.display = 'block';
-      statsPanel.classList.remove('active');
+    const isViewer = mode === 'viewer';
+    const isCompare = mode === 'compare';
 
-      // Show input area only if no content loaded
-      if (currentContent) {
-        inputArea.classList.add('hidden');
-      } else {
-        inputArea.classList.remove('hidden');
-      }
+    // Panels
+    viewerArea.style.display = isViewer ? 'block' : 'none';
+    statsPanel.classList.toggle('active', mode === 'statistics');
+    comparePanel.classList.toggle('active', isCompare);
 
-      // Show viewer-only controls
-      viewerOnlyControls.forEach(el => {
-        el.style.display = 'flex';
-      });
-    } else if (mode === 'statistics') {
-      // Show statistics, hide viewer
-      viewerArea.style.display = 'none';
+    // Input area belongs to the viewer only, and only while nothing is loaded.
+    if (isViewer && !currentContent) {
+      inputArea.classList.remove('hidden');
+    } else {
       inputArea.classList.add('hidden');
-      statsPanel.classList.add('active');
+    }
 
-      // Hide viewer-only controls
-      viewerOnlyControls.forEach(el => {
+    // Menu controls scoped to a single page
+    viewerOnlyControls.forEach(el => {
+      el.style.display = isViewer ? 'flex' : 'none';
+    });
+    compareOnlyControls.forEach(el => {
+      el.style.display = isCompare ? 'flex' : 'none';
+    });
+
+    // JSON search/tree controls only make sense on the viewer page. Leaving
+    // the page hides them; returning restores whatever the content warrants.
+    if (isViewer) {
+      updateJSONControlsVisibility();
+    } else {
+      jsonOnlyControls.forEach(el => {
         el.style.display = 'none';
       });
+    }
 
-      // Check if content is loaded
+    if (mode === 'statistics') {
       updateStatsNoContentMessage();
     }
   }
@@ -200,16 +231,26 @@
     const settings = getSettings();
     HL7Parser.renderContent(viewerContainer, currentContent, settings);
 
-    // Show the search box only when the rendered content is JSON.
     const isJSON = HL7Parser.detectContentType(currentContent) === 'json';
+    updateJSONControlsVisibility();
+    if (!isJSON && jsonSearchInput) {
+      jsonSearchInput.value = '';
+    }
+  }
+
+  /**
+   * Show the JSON search box and tree controls only when the viewer page is
+   * showing JSON content.
+   */
+  function updateJSONControlsVisibility() {
+    const isJSON = currentPageMode === 'viewer' && !!currentContent &&
+                   HL7Parser.detectContentType(currentContent) === 'json';
+    const settings = getSettings();
     if (jsonSearchGroup) {
       jsonSearchGroup.style.display = isJSON ? '' : 'none';
     }
     if (jsonTreeControlsGroup) {
       jsonTreeControlsGroup.style.display = (isJSON && settings.viewMode === 'collapsed') ? '' : 'none';
-    }
-    if (!isJSON && jsonSearchInput) {
-      jsonSearchInput.value = '';
     }
   }
 
@@ -270,6 +311,12 @@
    * Clear the viewer
    */
   function clearViewer() {
+    // On the Compare page, Clear applies to the comparison, not the viewer.
+    if (currentPageMode === 'compare') {
+      clearComparison();
+      return;
+    }
+
     currentContent = null;
     textInput.value = '';
     fileInput.value = '';
@@ -715,6 +762,283 @@
   });
 
   // ========================================
+  // COMPARE HANDLERS
+  // ========================================
+
+  let compareVolatileRules = HL7Diff.loadVolatileRules();
+  let lastCompareResult = null;
+
+  /**
+   * Report how many messages a pane holds, or why it can't be used.
+   */
+  function updateCompareStatus(textarea, statusEl) {
+    const content = textarea.value;
+    statusEl.classList.remove('error');
+
+    if (!content.trim()) {
+      statusEl.textContent = '';
+      return;
+    }
+
+    if (!HL7Parser.isHL7Content(content)) {
+      statusEl.textContent = 'Not recognized as HL7';
+      statusEl.classList.add('error');
+      return;
+    }
+
+    const messages = HL7Diff.parseMessages(content);
+    if (messages.length === 0) {
+      statusEl.textContent = 'No MSH segment found';
+      statusEl.classList.add('error');
+    } else if (messages.length === 1) {
+      statusEl.textContent = '1 message, ' + messages[0].segments.length + ' segments';
+    } else {
+      statusEl.textContent = messages.length + ' messages (the first will be compared)';
+    }
+  }
+
+  function refreshCompareStatuses() {
+    updateCompareStatus(compareInputA, compareStatusA);
+    updateCompareStatus(compareInputB, compareStatusB);
+  }
+
+  function runComparison() {
+    const a = compareInputA.value;
+    const b = compareInputB.value;
+
+    if (!a.trim() || !b.trim()) {
+      compareResults.innerHTML =
+        '<div class="compare-error">Both panes need an HL7 message before a comparison can run.</div>';
+      return;
+    }
+
+    const result = HL7Diff.compare(a, b, { volatileRules: compareVolatileRules });
+    lastCompareResult = result;
+    HL7Diff.render(result, compareResults, { showIdentical: compareShowIdentical.checked });
+  }
+
+  function rerenderComparison() {
+    if (!lastCompareResult) return;
+    HL7Diff.render(lastCompareResult, compareResults, { showIdentical: compareShowIdentical.checked });
+  }
+
+  function clearComparison() {
+    compareInputA.value = '';
+    compareInputB.value = '';
+    compareFileA.value = '';
+    compareFileB.value = '';
+    lastCompareResult = null;
+    refreshCompareStatuses();
+    compareResults.innerHTML = `
+      <div class="compare-no-content">
+        <p>Load a message into each pane and click "Compare Messages".</p>
+        <p class="compare-hint">Nothing is uploaded &mdash; parsing and comparison run entirely in this browser tab.</p>
+      </div>
+    `;
+  }
+
+  function loadCompareFile(file, textarea, statusEl) {
+    if (!file) return;
+    readFile(file)
+      .then(function(content) {
+        textarea.value = content;
+        updateCompareStatus(textarea, statusEl);
+      })
+      .catch(function(error) {
+        statusEl.textContent = 'Error reading file: ' + error.message;
+        statusEl.classList.add('error');
+      });
+  }
+
+  function setUpComparePaneDrop(pane, textarea, statusEl) {
+    pane.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      pane.classList.add('drag-over');
+    });
+    pane.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!pane.contains(e.relatedTarget)) {
+        pane.classList.remove('drag-over');
+      }
+    });
+    pane.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      pane.classList.remove('drag-over');
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        loadCompareFile(files[0], textarea, statusEl);
+      }
+    });
+  }
+
+  setUpComparePaneDrop(comparePaneA, compareInputA, compareStatusA);
+  setUpComparePaneDrop(comparePaneB, compareInputB, compareStatusB);
+
+  compareInputA.addEventListener('input', function() {
+    updateCompareStatus(compareInputA, compareStatusA);
+  });
+  compareInputB.addEventListener('input', function() {
+    updateCompareStatus(compareInputB, compareStatusB);
+  });
+
+  compareFileA.addEventListener('change', function() {
+    loadCompareFile(this.files[0], compareInputA, compareStatusA);
+  });
+  compareFileB.addEventListener('change', function() {
+    loadCompareFile(this.files[0], compareInputB, compareStatusB);
+  });
+
+  compareClearA.addEventListener('click', function() {
+    compareInputA.value = '';
+    compareFileA.value = '';
+    updateCompareStatus(compareInputA, compareStatusA);
+  });
+  compareClearB.addEventListener('click', function() {
+    compareInputB.value = '';
+    compareFileB.value = '';
+    updateCompareStatus(compareInputB, compareStatusB);
+  });
+
+  compareRunBtn.addEventListener('click', runComparison);
+
+  compareSwapBtn.addEventListener('click', function() {
+    const tmp = compareInputA.value;
+    compareInputA.value = compareInputB.value;
+    compareInputB.value = tmp;
+    refreshCompareStatuses();
+    if (lastCompareResult) {
+      runComparison();
+    }
+  });
+
+  compareShowIdentical.addEventListener('change', function() {
+    localStorage.setItem('hl7viewer_compareShowIdentical', compareShowIdentical.checked);
+    rerenderComparison();
+  });
+
+  // ---- Expected-variance rules ----
+
+  function renderRulesTextarea() {
+    compareRulesInput.value = compareVolatileRules.join('\n');
+  }
+
+  function readRulesTextarea() {
+    return compareRulesInput.value
+      .split(/\r\n|\n|\r/)
+      .map(function(line) { return line.trim(); })
+      .filter(function(line) { return line.length > 0; });
+  }
+
+  function flashRulesStatus(text) {
+    compareRulesStatus.textContent = text;
+    setTimeout(function() { compareRulesStatus.textContent = ''; }, 2500);
+  }
+
+  compareRulesToggle.addEventListener('click', function() {
+    compareRulesSection.open = !compareRulesSection.open;
+    if (compareRulesSection.open) {
+      compareRulesSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  });
+
+  compareRulesSaveBtn.addEventListener('click', function() {
+    compareVolatileRules = readRulesTextarea();
+    HL7Diff.saveVolatileRules(compareVolatileRules);
+    flashRulesStatus('Saved.');
+    if (lastCompareResult) {
+      runComparison();
+    }
+  });
+
+  compareRulesResetBtn.addEventListener('click', function() {
+    compareVolatileRules = HL7Diff.resetVolatileRules();
+    renderRulesTextarea();
+    flashRulesStatus('Reset to defaults.');
+    if (lastCompareResult) {
+      runComparison();
+    }
+  });
+
+  // ---- Result actions (delegated; results are re-rendered on every run) ----
+
+  compareResults.addEventListener('click', function(e) {
+    const ignoreBtn = e.target.closest('.compare-ignore-btn');
+    if (ignoreBtn) {
+      const row = ignoreBtn.closest('.compare-row');
+      if (!row) return;
+      const address = row.dataset.address;
+      if (address && compareVolatileRules.indexOf(address) === -1) {
+        compareVolatileRules.push(address);
+        HL7Diff.saveVolatileRules(compareVolatileRules);
+        renderRulesTextarea();
+        runComparison();
+      }
+      return;
+    }
+
+    if (e.target.closest('#compareCopyBtn')) {
+      if (!lastCompareResult) return;
+      copyTextToClipboard(HL7Diff.buildReport(lastCompareResult), e.target.closest('#compareCopyBtn'));
+      return;
+    }
+
+    if (e.target.closest('#compareDownloadBtn')) {
+      if (!lastCompareResult) return;
+      downloadText(HL7Diff.buildReport(lastCompareResult), 'hl7-comparison.txt');
+    }
+  });
+
+  /**
+   * Copy text without leaving the page. Falls back to execCommand for
+   * contexts where the async clipboard API is unavailable.
+   */
+  function copyTextToClipboard(text, btn) {
+    const original = btn ? btn.textContent : null;
+    function done() {
+      if (!btn) return;
+      btn.textContent = 'Copied';
+      setTimeout(function() { btn.textContent = original; }, 1500);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(function() {
+        legacyCopy(text);
+        done();
+      });
+    } else {
+      legacyCopy(text);
+      done();
+    }
+  }
+
+  function legacyCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+
+  /**
+   * Save a report locally. Uses a blob URL so nothing touches the network.
+   */
+  function downloadText(text, filename) {
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(function() { URL.revokeObjectURL(url); }, 0);
+  }
+
+  // ========================================
   // INITIALIZATION
   // ========================================
 
@@ -726,6 +1050,11 @@
 
   // Load saved settings
   loadSettings();
+
+  // Initialize the compare page
+  compareShowIdentical.checked = localStorage.getItem('hl7viewer_compareShowIdentical') === 'true';
+  renderRulesTextarea();
+  refreshCompareStatuses();
 
   // Initialize page mode
   setPageMode('viewer');
