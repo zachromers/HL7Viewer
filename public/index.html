@@ -77,8 +77,8 @@
         </div>
         <div class="control-group compare-only-control" style="display: none;">
           <label class="checkbox-control">
-            <input type="checkbox" id="compareShowIdentical">
-            <span class="checkbox-label">Show Identical Fields</span>
+            <input type="checkbox" id="compareShowUnflagged">
+            <span class="checkbox-label">Show Unflagged Fields</span>
           </label>
         </div>
         <button id="clearBtn" class="clear-btn" title="Clear viewer">Clear</button>
@@ -208,8 +208,9 @@
         <div class="compare-intro">
           <h2>Compare Two HL7 Messages</h2>
           <p>Paste or drop one message into each pane. The comparison aligns the two messages segment
-             by segment and reports structural and type differences, while treating fields that are
-             expected to vary (patient IDs, timestamps, control IDs) as background noise.</p>
+             by segment and reports differences in <strong>shape</strong> &mdash; fields present in one
+             message but not the other, values that change type, malformed data, and structural changes.
+             Fields that merely hold different values of the same shape are not reported.</p>
         </div>
 
         <div class="compare-inputs">
@@ -250,27 +251,8 @@
 
         <div class="compare-controls">
           <button type="button" id="compareRunBtn" class="compare-run-btn">Compare Messages</button>
-          <button type="button" id="compareSwapBtn" class="compare-secondary-btn" title="Swap Message A and Message B">Swap A &harr; B</button>
-          <button type="button" id="compareRulesToggle" class="compare-secondary-btn">Expected-Variance Rules</button>
         </div>
 
-        <details class="compare-rules" id="compareRulesSection">
-          <summary>Expected-Variance Rules</summary>
-          <p class="compare-rules-help">
-            Fields listed here are expected to differ between two otherwise-equivalent messages, so a
-            plain value difference is filed under <em>Expected variance</em> instead of being reported
-            as a problem. Presence differences, type mismatches, and malformed data are still reported
-            in full for these fields. One rule per line; use <code>SEG.FIELD</code>,
-            <code>SEG.FIELD.COMPONENT</code>, a bare <code>SEG</code>, or a wildcard such as
-            <code>ZPD.*</code>. Rules are saved in this browser only.
-          </p>
-          <textarea id="compareRulesInput" class="compare-rules-input" spellcheck="false"></textarea>
-          <div class="compare-rules-actions">
-            <button type="button" id="compareRulesSaveBtn" class="compare-secondary-btn">Save Rules</button>
-            <button type="button" id="compareRulesResetBtn" class="compare-secondary-btn">Reset to Defaults</button>
-            <span class="compare-rules-status" id="compareRulesStatus"></span>
-          </div>
-        </details>
 
         <div class="compare-results" id="compareResults">
           <div class="compare-no-content">

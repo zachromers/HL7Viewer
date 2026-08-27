@@ -1,76 +1,23 @@
 // HL7 Viewer - Message Comparison Module
-// Semantic diff between two HL7 messages. Everything runs in the browser;
+// Structural diff between two HL7 messages. Everything runs in the browser;
 // no content ever leaves the page.
+//
+// This compares the SHAPE of two messages, never their values. Two fields
+// holding "M" and "F" are both all-caps alphabetic of length 1, so they are
+// not a difference. What counts as a difference is a field present in one
+// message and not the other, a value that changes type (numeric vs
+// alphanumeric), a change in letter-case pattern or numeric padding, a
+// date/time precision change, malformed data, and anything structural at the
+// segment level.
 
 const HL7Diff = (function() {
   'use strict';
 
-  const STORAGE_KEY_VOLATILE = 'hl7viewer_diffVolatileRules';
-
-  // ========================================
-  // DEFAULT RULES
-  // ========================================
-
-  // Fields that routinely differ between two otherwise-equivalent messages.
-  // A plain value difference here is demoted to "expected variance"; a
-  // presence, shape, or malformed-data difference is still reported in full.
-  const DEFAULT_VOLATILE_RULES = [
-    'MSH.7',        // Date/Time of Message
-    'MSH.10',       // Message Control ID
-    'EVN.2',        // Recorded Date/Time
-    'EVN.6',        // Event Occurred
-    'PID.2',        // Patient ID
-    'PID.3',        // Patient Identifier List
-    'PID.4',        // Alternate Patient ID
-    'PID.5',        // Patient Name
-    'PID.7',        // Date/Time of Birth
-    'PID.11',       // Patient Address
-    'PID.13',       // Phone Number - Home
-    'PID.14',       // Phone Number - Business
-    'PID.18',       // Patient Account Number
-    'PID.19',       // SSN Number
-    'PV1.19',       // Visit Number
-    'PV1.44',       // Admit Date/Time
-    'PV1.45',       // Discharge Date/Time
-    'PV2.8',        // Expected Admit Date/Time
-    'PV2.9',        // Expected Discharge Date/Time
-    'ORC.2',        // Placer Order Number
-    'ORC.3',        // Filler Order Number
-    'ORC.9',        // Date/Time of Transaction
-    'ORC.15',       // Order Effective Date/Time
-    'OBR.2',        // Placer Order Number
-    'OBR.3',        // Filler Order Number
-    'OBR.7',        // Observation Date/Time
-    'OBR.8',        // Observation End Date/Time
-    'OBR.14',       // Specimen Received Date/Time
-    'OBR.22',       // Results Rpt/Status Chng Date/Time
-    'OBX.14',       // Date/Time of the Observation
-    'OBX.19',       // Date/Time of the Analysis
-    'FT1.4',        // Transaction Date
-    'FT1.5',        // Transaction Posting Date
-    'GT1.3',        // Guarantor Name
-    'GT1.5',        // Guarantor Address
-    'GT1.6',        // Guarantor Phone Number - Home
-    'GT1.12',       // Guarantor SSN
-    'IN1.36',       // Policy Number
-    'IN1.49',       // Insured's ID Number
-    'IN2.2',        // Insured's SSN
-    'SCH.26',       // Placer Order Number
-    'MRG.1',        // Prior Patient Identifier List
-    'MRG.5'         // Prior Patient Account Number
-  ];
-
-  // Differences here are promoted to high severity even when the values look
-  // benign: they describe how the message was routed and typed, which is the
-  // usual reason one message is accepted and another rejected.
-  const CRITICAL_FIELDS = {
-    'MSH.2': 'Encoding characters differ. A receiving system that expects one set of delimiters may fail to parse the other message at all.',
-    'MSH.3': 'Sending application differs. The two messages likely came from different interfaces or configurations.',
-    'MSH.4': 'Sending facility differs. The two messages likely came from different interfaces or configurations.',
-    'MSH.5': 'Receiving application differs. The two messages were routed to different destinations.',
-    'MSH.6': 'Receiving facility differs. The two messages were routed to different destinations.',
-    'MSH.9': 'Message type / trigger event differs. The two messages are handled by different processing rules.',
-    'MSH.11': 'Processing ID differs (e.g. production vs debug/training). Receivers often treat these differently.',
+  // A plain value difference is normally ignored. These two fields are the
+  // exception: a different message type or HL7 version means the two messages
+  // are not structurally the same kind of message at all.
+  const STRUCTURAL_IDENTITY_FIELDS = {
+    'MSH.9': 'Message type / trigger event differs. These are structurally different messages, handled by different processing rules.',
     'MSH.12': 'HL7 version differs. Field definitions and required elements may not match between versions.'
   };
 
@@ -205,6 +152,22 @@ const HL7Diff = (function() {
     return segInfo ? segInfo.name : 'Custom / Unknown Segment';
   }
 
+  /** Strip occurrence and repetition indices: "PID.3[2].1" -> "PID.3.1". */
+  function ruleAddress(addr) {
+    return addr.replace(/\[\d+\]/g, '');
+  }
+
+  function identityNote(addr) {
+    const base = ruleAddress(addr);
+    if (STRUCTURAL_IDENTITY_FIELDS[base]) return STRUCTURAL_IDENTITY_FIELDS[base];
+    const parts = base.split('.');
+    if (parts.length > 2) {
+      const fieldOnly = parts[0] + '.' + parts[1];
+      if (STRUCTURAL_IDENTITY_FIELDS[fieldOnly]) return STRUCTURAL_IDENTITY_FIELDS[fieldOnly];
+    }
+    return null;
+  }
+
   // ========================================
   // VALUE SIGNATURES
   // ========================================
@@ -222,34 +185,53 @@ const HL7Diff = (function() {
   }
 
   /**
+   * Letter-case pattern, so "M" and "F" match but "SMITH" and "Smith" do not.
+   * Values with no letters have no case pattern.
+   */
+  function caseClass(v) {
+    if (!/[A-Za-z]/.test(v)) return 'none';
+    const upper = v === v.toUpperCase();
+    const lower = v === v.toLowerCase();
+    if (upper) return 'upper';
+    if (lower) return 'lower';
+    return 'mixed';
+  }
+
+  const CASE_LABELS = {
+    upper: 'all upper case',
+    lower: 'all lower case',
+    mixed: 'mixed case',
+    none: 'no letters'
+  };
+
+  /**
    * Classify a value's shape.
-   *   cls  - broad class used for high-severity shape mismatches
+   *   cls  - broad class used for high-severity type mismatches
    *   type - narrow type used for lower-severity format/precision notes
    */
   function signature(value) {
     const v = value;
-    if (!v) return { cls: 'empty', type: 'empty', length: 0, label: 'empty' };
+    if (!v) return { cls: 'empty', type: 'empty', length: 0, caseClass: 'none', label: 'empty' };
 
     const len = v.length;
+    const cc = caseClass(v);
 
     // HL7 timestamp forms: YYYYMMDD[HHMM[SS[.S+]]][+/-ZZZZ]
     const tsMatch = v.match(/^(\d{8})(\d{2}(?:\d{2}(?:\d{2})?)?)?(\.\d{1,4})?([+-]\d{4})?$/);
     if (tsMatch && isValidDatePart(tsMatch[1])) {
       if (tsMatch[2] || tsMatch[3] || tsMatch[4]) {
         const precision = 8 + (tsMatch[2] ? tsMatch[2].length : 0);
-        return { cls: 'numeric', type: 'datetime', length: len, precision: precision, label: 'date/time' };
+        return { cls: 'numeric', type: 'datetime', length: len, precision: precision, caseClass: cc, label: 'date/time' };
       }
-      return { cls: 'numeric', type: 'date', length: len, precision: 8, label: 'date' };
+      return { cls: 'numeric', type: 'date', length: len, precision: 8, caseClass: cc, label: 'date' };
     }
 
-    // Anything else that is date-shaped but not a real calendar date falls
-    // through to the generic checks and is reported by valueIssues().
-    if (/^-?\d+$/.test(v)) return { cls: 'numeric', type: 'numeric', length: len, label: 'numeric' };
-    if (/^-?\d*\.\d+$/.test(v)) return { cls: 'numeric', type: 'decimal', length: len, label: 'decimal' };
-    if (/^[A-Za-z]+$/.test(v)) return { cls: 'alpha', type: 'alpha', length: len, label: 'alphabetic' };
-    if (/^[A-Za-z0-9]+$/.test(v)) return { cls: 'alphanumeric', type: 'alphanumeric', length: len, label: 'alphanumeric' };
-    if (/^[A-Za-z0-9 .,'\-\/()]+$/.test(v)) return { cls: 'text', type: 'text', length: len, label: 'text' };
-    return { cls: 'text', type: 'symbolic', length: len, label: 'text with symbols' };
+    if (/^-?\d+$/.test(v)) return { cls: 'numeric', type: 'numeric', length: len, caseClass: cc, label: 'numeric' };
+    if (/^-?\d*\.\d+$/.test(v)) return { cls: 'numeric', type: 'decimal', length: len, caseClass: cc, label: 'decimal' };
+    if (/^[A-Za-z]+$/.test(v)) return { cls: 'alpha', type: 'alpha', length: len, caseClass: cc, label: 'alphabetic' };
+    if (/^[A-Za-z0-9]+$/.test(v)) return { cls: 'alphanumeric', type: 'alphanumeric', length: len, caseClass: cc, label: 'alphanumeric' };
+    if (/^[A-Za-z0-9 .,'\-\/()]+$/.test(v)) return { cls: 'text', type: 'text', length: len, caseClass: cc, label: 'text' };
+    return { cls: 'text', type: 'symbolic', length: len, caseClass: cc, label: 'text with symbols' };
   }
 
   function describeSignature(sig) {
@@ -272,7 +254,6 @@ const HL7Diff = (function() {
     if (/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(value)) {
       issues.push('contains control characters');
     }
-    // eslint-disable-next-line no-control-regex
     if (/[^\x00-\x7F]/.test(value)) {
       issues.push('contains non-ASCII characters');
     }
@@ -288,8 +269,7 @@ const HL7Diff = (function() {
       const escIdx = value.indexOf(esc);
       if (escIdx !== -1) {
         const rest = value.substring(escIdx + 1);
-        const closes = rest.indexOf(esc);
-        if (closes === -1) {
+        if (rest.indexOf(esc) === -1) {
           issues.push('contains an unterminated escape sequence');
         }
       }
@@ -298,89 +278,6 @@ const HL7Diff = (function() {
       issues.push('looks like a date but is not a valid calendar date');
     }
     return issues;
-  }
-
-  // ========================================
-  // RULE MATCHING
-  // ========================================
-
-  function loadVolatileRules() {
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY_VOLATILE);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed)) return parsed;
-      }
-    } catch (e) {
-      // Ignore malformed or unavailable storage and fall back to defaults.
-    }
-    return DEFAULT_VOLATILE_RULES.slice();
-  }
-
-  function saveVolatileRules(rules) {
-    try {
-      localStorage.setItem(STORAGE_KEY_VOLATILE, JSON.stringify(rules));
-    } catch (e) {
-      // Storage may be unavailable (private mode); rules still apply in-session.
-    }
-  }
-
-  function resetVolatileRules() {
-    try {
-      localStorage.removeItem(STORAGE_KEY_VOLATILE);
-    } catch (e) {
-      // Nothing to do.
-    }
-    return DEFAULT_VOLATILE_RULES.slice();
-  }
-
-  /**
-   * Normalize an address to its rule form: strip occurrence and repetition
-   * indices so "PID.3[2].1" is matched by the rule "PID.3".
-   */
-  function ruleAddress(addr) {
-    return addr.replace(/\[\d+\]/g, '');
-  }
-
-  function ruleMatches(rule, addr) {
-    const r = rule.trim().toUpperCase();
-    if (!r) return false;
-    const a = ruleAddress(addr).toUpperCase();
-    if (r === a) return true;
-    // A rule matches any deeper address: "PID.5" matches "PID.5.1".
-    if (a.indexOf(r + '.') === 0) return true;
-    // Wildcard field number: "ZPD.*" matches every ZPD field.
-    if (r.indexOf('*') !== -1) {
-      const pattern = '^' + r.split('*').map(escapeRegExp).join('[^.]*') + '(\\..*)?$';
-      try {
-        return new RegExp(pattern).test(a);
-      } catch (e) {
-        return false;
-      }
-    }
-    return false;
-  }
-
-  function escapeRegExp(s) {
-    return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  }
-
-  function isVolatileAddress(addr, rules) {
-    for (let i = 0; i < rules.length; i++) {
-      if (ruleMatches(rules[i], addr)) return true;
-    }
-    return false;
-  }
-
-  function criticalNote(addr) {
-    const base = ruleAddress(addr);
-    if (CRITICAL_FIELDS[base]) return CRITICAL_FIELDS[base];
-    const parts = base.split('.');
-    if (parts.length > 2) {
-      const fieldOnly = parts[0] + '.' + parts[1];
-      if (CRITICAL_FIELDS[fieldOnly]) return CRITICAL_FIELDS[fieldOnly];
-    }
-    return null;
   }
 
   // ========================================
@@ -489,10 +386,11 @@ const HL7Diff = (function() {
   // COMPARISON
   // ========================================
 
-  const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, info: 3, none: 4 };
+  const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
 
   /**
    * Compare two leaf values and produce a verdict.
+   * Values that differ but share a shape are NOT a difference.
    */
   function classifyLeaf(addr, rawA, rawB, ctx) {
     const a = rawA == null ? '' : rawA;
@@ -580,7 +478,16 @@ const HL7Diff = (function() {
       return {
         kind: 'case',
         severity: 'low',
-        detail: 'Values differ only by letter case.'
+        detail: 'Same text, different letter case.'
+      };
+    }
+
+    if (sigA.caseClass !== sigB.caseClass) {
+      return {
+        kind: 'case',
+        severity: 'low',
+        detail: 'Letter case pattern differs: Message A is ' + CASE_LABELS[sigA.caseClass] +
+                ', Message B is ' + CASE_LABELS[sigB.caseClass] + '.'
       };
     }
 
@@ -592,15 +499,15 @@ const HL7Diff = (function() {
       };
     }
 
-    if (ctx.isVolatile(addr)) {
-      return {
-        kind: 'volatile',
-        severity: 'info',
-        detail: 'Value differs, but this field is expected to vary between messages.'
-      };
+    // A different message type or version means these are not the same kind
+    // of message, which is structural rather than a mere value change.
+    const note = identityNote(addr);
+    if (note) {
+      return { kind: 'identity', severity: 'high', detail: 'Values differ.', note: note };
     }
 
-    return { kind: 'value', severity: 'medium', detail: 'Values differ.' };
+    // Same shape, different value - deliberately not a difference.
+    return { kind: 'sameshape', severity: 'none' };
   }
 
   /**
@@ -623,7 +530,7 @@ const HL7Diff = (function() {
       const fieldAddr = segTag + '.' + fieldNum + repTag;
 
       if (repA === repB) {
-        addRow(ctx, rows, fieldAddr, segmentId, occurrence, fieldNum, null, null, repA, repB,
+        addRow(rows, fieldAddr, segmentId, occurrence, fieldNum, null, null, repA, repB,
                { kind: 'identical', severity: 'none' });
         continue;
       }
@@ -633,7 +540,7 @@ const HL7Diff = (function() {
       const hasComps = repA.indexOf(compSepA) !== -1 || repB.indexOf(compSepB) !== -1;
 
       if (!hasComps) {
-        addRow(ctx, rows, fieldAddr, segmentId, occurrence, fieldNum, null, null, repA, repB,
+        addRow(rows, fieldAddr, segmentId, occurrence, fieldNum, null, null, repA, repB,
                classifyLeaf(fieldAddr, repA, repB, ctx));
         continue;
       }
@@ -649,7 +556,7 @@ const HL7Diff = (function() {
         const compAddr = fieldAddr + '.' + compNum;
 
         if (cA === cB) {
-          addRow(ctx, rows, compAddr, segmentId, occurrence, fieldNum, compNum, null, cA, cB,
+          addRow(rows, compAddr, segmentId, occurrence, fieldNum, compNum, null, cA, cB,
                  { kind: 'identical', severity: 'none' });
           continue;
         }
@@ -659,7 +566,7 @@ const HL7Diff = (function() {
         const hasSubs = cA.indexOf(subSepA) !== -1 || cB.indexOf(subSepB) !== -1;
 
         if (!hasSubs) {
-          addRow(ctx, rows, compAddr, segmentId, occurrence, fieldNum, compNum, null, cA, cB,
+          addRow(rows, compAddr, segmentId, occurrence, fieldNum, compNum, null, cA, cB,
                  classifyLeaf(compAddr, cA, cB, ctx));
           continue;
         }
@@ -673,29 +580,18 @@ const HL7Diff = (function() {
           const sB = subsB[s] != null ? subsB[s] : '';
           const subNum = s + 1;
           const subAddr = compAddr + '.' + subNum;
-          addRow(ctx, rows, subAddr, segmentId, occurrence, fieldNum, compNum, subNum, sA, sB,
+          addRow(rows, subAddr, segmentId, occurrence, fieldNum, compNum, subNum, sA, sB,
                  classifyLeaf(subAddr, sA, sB, ctx));
         }
       }
     }
   }
 
-  function addRow(ctx, rows, addr, segmentId, occurrence, fieldNum, compNum, subNum, valueA, valueB, verdict) {
-    // Suppress rows that are empty on both sides and identical - they are just
-    // padding created by unequal field counts.
-    if (verdict.kind === 'identical' && !String(valueA).trim() && !String(valueB).trim()) {
+  function addRow(rows, addr, segmentId, occurrence, fieldNum, compNum, subNum, valueA, valueB, verdict) {
+    // Suppress rows that are empty on both sides - they are just padding
+    // created by unequal field counts.
+    if (verdict.severity === 'none' && !String(valueA).trim() && !String(valueB).trim()) {
       return;
-    }
-
-    // Promote routing/typing fields regardless of how the values compare.
-    let note = null;
-    if (verdict.severity !== 'none') {
-      note = criticalNote(addr);
-      if (note) {
-        if (verdict.kind === 'volatile') verdict.kind = 'value';
-        verdict.severity = 'high';
-        verdict.critical = true;
-      }
     }
 
     rows.push({
@@ -713,18 +609,14 @@ const HL7Diff = (function() {
       severity: verdict.severity,
       side: verdict.side || null,
       detail: verdict.detail || '',
-      critical: !!verdict.critical,
-      note: note
+      note: verdict.note || null
     });
   }
 
   /**
    * Run the full comparison. Returns a result object; does no DOM work.
    */
-  function compare(contentA, contentB, options) {
-    const opts = options || {};
-    const rules = opts.volatileRules || loadVolatileRules();
-
+  function compare(contentA, contentB) {
     const messagesA = parseMessages(contentA || '');
     const messagesB = parseMessages(contentB || '');
 
@@ -738,16 +630,26 @@ const HL7Diff = (function() {
 
     const msgA = messagesA[0];
     const msgB = messagesB[0];
-
-    const ctx = {
-      msgA: msgA,
-      msgB: msgB,
-      isVolatile: function(addr) { return isVolatileAddress(addr, rules); }
-    };
+    const ctx = { msgA: msgA, msgB: msgB };
 
     const pairs = alignSegments(msgA, msgB);
     const groups = [];
-    const findings = [];
+    const structure = [];
+
+    // Message-level: delimiters.
+    if (msgA.componentSeparator !== msgB.componentSeparator ||
+        msgA.fieldSeparator !== msgB.fieldSeparator ||
+        msgA.subcomponentSeparator !== msgB.subcomponentSeparator ||
+        msgA.repetitionSeparator !== msgB.repetitionSeparator) {
+      structure.push({
+        severity: 'high',
+        kind: 'delimiters',
+        text: 'The two messages use different delimiters (A: "' + msgA.fieldSeparator + msgA.componentSeparator +
+              msgA.repetitionSeparator + msgA.escapeCharacter + msgA.subcomponentSeparator + '", B: "' +
+              msgB.fieldSeparator + msgB.componentSeparator + msgB.repetitionSeparator +
+              msgB.escapeCharacter + msgB.subcomponentSeparator + '").'
+      });
+    }
 
     // Message-level: segment inventory.
     const countsA = countSegments(msgA);
@@ -761,39 +663,21 @@ const HL7Diff = (function() {
       if (ca === cb) return;
       if (ca === 0 || cb === 0) {
         const side = ca > 0 ? 'A' : 'B';
-        findings.push({
+        structure.push({
           severity: 'high',
           kind: 'segment-presence',
-          address: segId,
           text: segId + ' (' + segmentLabel(segId) + ') is present in Message ' + side + ' only' +
                 ((ca || cb) > 1 ? ' (' + (ca || cb) + ' occurrences)' : '') + '.'
         });
       } else {
-        findings.push({
+        structure.push({
           severity: 'medium',
           kind: 'segment-count',
-          address: segId,
           text: segId + ' occurs ' + ca + ' time' + (ca === 1 ? '' : 's') + ' in Message A but ' +
                 cb + ' time' + (cb === 1 ? '' : 's') + ' in Message B.'
         });
       }
     });
-
-    // Delimiters.
-    if (msgA.componentSeparator !== msgB.componentSeparator ||
-        msgA.fieldSeparator !== msgB.fieldSeparator ||
-        msgA.subcomponentSeparator !== msgB.subcomponentSeparator ||
-        msgA.repetitionSeparator !== msgB.repetitionSeparator) {
-      findings.push({
-        severity: 'high',
-        kind: 'delimiters',
-        address: 'MSH.1/MSH.2',
-        text: 'The two messages use different delimiters (A: "' + msgA.fieldSeparator + msgA.componentSeparator +
-              msgA.repetitionSeparator + msgA.escapeCharacter + msgA.subcomponentSeparator + '", B: "' +
-              msgB.fieldSeparator + msgB.componentSeparator + msgB.repetitionSeparator +
-              msgB.escapeCharacter + msgB.subcomponentSeparator + '").'
-      });
-    }
 
     // Field-level comparison, segment pair by segment pair.
     pairs.forEach(function(pair) {
@@ -820,12 +704,12 @@ const HL7Diff = (function() {
           return r.kind === 'presence' && r.fieldNum > Math.min(maxA, maxB);
         });
         if (tailPopulated) {
-          findings.push({
+          structure.push({
             severity: 'medium',
             kind: 'truncation',
-            address: pair.segmentId + '[' + pair.occurrence + ']',
-            text: pair.segmentId + ' in Message ' + shorter + ' ends at field ' + Math.min(maxA, maxB) +
-                  ' while Message ' + longer + ' carries data through field ' + Math.max(maxA, maxB) + '.'
+            text: pair.segmentId + '[' + pair.occurrence + '] in Message ' + shorter + ' ends at field ' +
+                  Math.min(maxA, maxB) + ' while Message ' + longer + ' carries data through field ' +
+                  Math.max(maxA, maxB) + '.'
           });
         }
       }
@@ -840,43 +724,16 @@ const HL7Diff = (function() {
       });
     });
 
-    // Roll field-level rows up into findings. A segment that exists on only
-    // one side is already covered by its segment-level finding, so its fields
-    // stay in the detail table rather than flooding the findings list.
-    groups.forEach(function(g) {
-      if (!g.presentA || !g.presentB) return;
-      g.rows.forEach(function(row) {
-        if (row.severity === 'none' || row.severity === 'info') return;
-        findings.push({
-          severity: row.severity,
-          kind: row.kind,
-          address: row.displayAddress,
-          label: row.label,
-          valueA: row.valueA,
-          valueB: row.valueB,
-          text: findingText(row),
-          note: row.note
-        });
-      });
+    structure.sort(function(x, y) {
+      return SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity];
     });
 
-    findings.sort(function(x, y) {
-      const s = SEVERITY_ORDER[x.severity] - SEVERITY_ORDER[y.severity];
-      if (s !== 0) return s;
-      return String(x.address).localeCompare(String(y.address));
-    });
-
-    // High/medium/low count the findings listed above the detail table so the
-    // summary matches the list; expected and identical are row-level totals
-    // with no finding of their own.
-    const counts = { high: 0, medium: 0, low: 0, info: 0, identical: 0 };
-    findings.forEach(function(f) {
-      counts[f.severity]++;
-    });
+    const counts = { high: 0, medium: 0, low: 0, unflagged: 0 };
+    structure.forEach(function(s) { counts[s.severity]++; });
     groups.forEach(function(g) {
       g.rows.forEach(function(r) {
-        if (r.severity === 'none') counts.identical++;
-        else if (r.severity === 'info') counts.info++;
+        if (r.severity === 'none') counts.unflagged++;
+        else counts[r.severity]++;
       });
     });
 
@@ -885,9 +742,8 @@ const HL7Diff = (function() {
       messagesA: messagesA.length,
       messagesB: messagesB.length,
       groups: groups,
-      findings: findings,
-      counts: counts,
-      rules: rules
+      structure: structure,
+      counts: counts
     };
   }
 
@@ -899,29 +755,6 @@ const HL7Diff = (function() {
     return out;
   }
 
-  function findingText(row) {
-    const where = row.displayAddress + (row.label ? ' (' + row.label + ')' : '');
-    switch (row.kind) {
-      case 'presence':
-        return where + ' is populated in Message ' + row.side + ' only — "' +
-               (row.side === 'A' ? row.valueA : row.valueB) + '".';
-      case 'shape':
-        return where + ' changes type: ' + row.detail;
-      case 'malformed':
-        return where + ': ' + row.detail;
-      case 'precision':
-        return where + ': ' + row.detail;
-      case 'format':
-        return where + ': ' + row.detail;
-      case 'case':
-        return where + ': ' + row.detail;
-      case 'whitespace':
-        return where + ': ' + row.detail;
-      default:
-        return where + ' differs: "' + row.valueA + '" vs "' + row.valueB + '".';
-    }
-  }
-
   // ========================================
   // TEXT REPORT
   // ========================================
@@ -931,29 +764,30 @@ const HL7Diff = (function() {
     lines.push('HL7 Message Comparison');
     lines.push('======================');
     lines.push('');
-    lines.push('Differences: ' + result.counts.high + ' high, ' + result.counts.medium + ' medium, ' +
-               result.counts.low + ' low, ' + result.counts.info + ' expected variance, ' +
-               result.counts.identical + ' identical.');
+    lines.push('Structural differences only - fields that differ in value but share');
+    lines.push('the same shape are not reported.');
+    lines.push('');
+    lines.push(result.counts.high + ' high, ' + result.counts.medium + ' medium, ' +
+               result.counts.low + ' low, ' + result.counts.unflagged + ' unflagged.');
     lines.push('');
 
-    const ranked = result.findings.filter(function(f) { return f.severity !== 'info'; });
-    if (ranked.length === 0) {
-      lines.push('No meaningful differences found.');
-    } else {
-      lines.push('Findings');
-      lines.push('--------');
-      ranked.forEach(function(f, i) {
-        lines.push((i + 1) + '. [' + f.severity.toUpperCase() + '] ' + f.text);
-        if (f.note) lines.push('     Note: ' + f.note);
+    if (result.structure.length > 0) {
+      lines.push('Message Structure');
+      lines.push('-----------------');
+      result.structure.forEach(function(s) {
+        lines.push('  [' + s.severity.toUpperCase() + '] ' + s.text);
       });
+      lines.push('');
     }
 
-    lines.push('');
-    lines.push('Field Detail');
-    lines.push('------------');
+    lines.push('Findings');
+    lines.push('--------');
+
+    let any = false;
     result.groups.forEach(function(g) {
       const diffRows = g.rows.filter(function(r) { return r.severity !== 'none'; });
       if (diffRows.length === 0) return;
+      any = true;
       lines.push('');
       lines.push(g.segmentId + '[' + g.occurrence + '] - ' + g.label +
                  (!g.presentA ? '  (Message B only)' : '') + (!g.presentB ? '  (Message A only)' : ''));
@@ -962,11 +796,16 @@ const HL7Diff = (function() {
                    (r.label ? '  ' + r.label : ''));
         lines.push('    A: ' + (r.valueA || '(empty)'));
         lines.push('    B: ' + (r.valueB || '(empty)'));
+        if (r.detail) lines.push('    ' + r.detail);
+        if (r.note) lines.push('    Note: ' + r.note);
       });
     });
 
-    lines.push('');
-    lines.push('Expected-variance rules in effect: ' + result.rules.join(', '));
+    if (!any && result.structure.length === 0) {
+      lines.push('');
+      lines.push('No structural differences found. The two messages have the same shape.');
+    }
+
     return lines.join('\n');
   }
 
@@ -985,13 +824,12 @@ const HL7Diff = (function() {
     shape: 'Type mismatch',
     malformed: 'Malformed data',
     precision: 'Precision change',
-    structure: 'Structure',
-    value: 'Value differs',
+    identity: 'Message identity',
     format: 'Format',
-    case: 'Case only',
+    case: 'Letter case',
     whitespace: 'Whitespace',
-    volatile: 'Expected variance',
     identical: 'Identical',
+    sameshape: 'Same shape',
     'segment-presence': 'Segment missing',
     'segment-count': 'Segment count',
     truncation: 'Truncated segment',
@@ -1041,7 +879,7 @@ const HL7Diff = (function() {
    */
   function render(result, container, viewOptions) {
     if (!container) return;
-    const showIdentical = !!(viewOptions && viewOptions.showIdentical);
+    const showUnflagged = !!(viewOptions && viewOptions.showUnflagged);
 
     if (result.error) {
       container.innerHTML = '<div class="compare-error">' + escapeHtml(result.error) + '</div>';
@@ -1054,8 +892,7 @@ const HL7Diff = (function() {
     html += summaryChip('high', result.counts.high, 'High');
     html += summaryChip('medium', result.counts.medium, 'Medium');
     html += summaryChip('low', result.counts.low, 'Low');
-    html += summaryChip('info', result.counts.info, 'Expected');
-    html += summaryChip('identical', result.counts.identical, 'Identical');
+    html += summaryChip('unflagged', result.counts.unflagged, 'Unflagged');
     html += '<div class="compare-summary-actions">' +
             '<button type="button" class="compare-action-btn" id="compareCopyBtn">Copy Report</button>' +
             '<button type="button" class="compare-action-btn" id="compareDownloadBtn">Download Report</button>' +
@@ -1068,37 +905,30 @@ const HL7Diff = (function() {
               ' in B). Comparing the first message from each side.</div>';
     }
 
-    // Findings
-    const ranked = result.findings.filter(function(f) { return f.severity !== 'info'; });
-    html += '<div class="compare-findings">';
     html += '<h3 class="compare-section-title">Findings</h3>';
-    if (ranked.length === 0) {
-      html += '<p class="compare-findings-empty">No meaningful differences found. ' +
-              'Every difference between these messages falls under the expected-variance rules.</p>';
-    } else {
-      html += '<ol class="compare-findings-list">';
-      ranked.forEach(function(f) {
-        html += '<li class="compare-finding sev-' + f.severity + '">' +
-                '<span class="compare-sev-badge sev-' + f.severity + '">' + f.severity + '</span>' +
-                '<span class="compare-kind-badge">' + escapeHtml(KIND_LABELS[f.kind] || f.kind) + '</span>' +
-                '<span class="compare-finding-text">' + escapeHtml(f.text) + '</span>' +
-                (f.note ? '<span class="compare-finding-note">' + escapeHtml(f.note) + '</span>' : '') +
+
+    if (result.structure.length > 0) {
+      html += '<ul class="compare-structure">';
+      result.structure.forEach(function(s) {
+        html += '<li class="compare-structure-item sev-' + s.severity + '">' +
+                '<span class="compare-sev-badge sev-' + s.severity + '">' + s.severity + '</span>' +
+                '<span class="compare-kind-badge">' + escapeHtml(KIND_LABELS[s.kind] || s.kind) + '</span>' +
+                '<span class="compare-structure-text">' + escapeHtml(s.text) + '</span>' +
                 '</li>';
       });
-      html += '</ol>';
+      html += '</ul>';
     }
-    html += '</div>';
 
-    // Field detail
-    html += '<h3 class="compare-section-title">Field Detail</h3>';
     html += '<div class="compare-groups">';
 
     let renderedGroups = 0;
+    let flaggedTotal = 0;
     result.groups.forEach(function(group) {
       const visibleRows = group.rows.filter(function(r) {
-        return showIdentical || r.severity !== 'none';
+        return showUnflagged || r.severity !== 'none';
       });
       const diffCount = group.rows.filter(function(r) { return r.severity !== 'none'; }).length;
+      flaggedTotal += diffCount;
       if (visibleRows.length === 0) return;
       renderedGroups++;
 
@@ -1121,27 +951,19 @@ const HL7Diff = (function() {
               '<th class="col-verdict">Difference</th>' +
               '</tr></thead><tbody>';
 
-      const normalRows = visibleRows.filter(function(r) { return r.severity !== 'info'; });
-      const infoRows = visibleRows.filter(function(r) { return r.severity === 'info'; });
-
-      normalRows.forEach(function(row) { html += rowHtml(row); });
+      visibleRows.forEach(function(row) { html += rowHtml(row); });
 
       html += '</tbody></table>';
-
-      if (infoRows.length > 0) {
-        html += '<details class="compare-expected">';
-        html += '<summary>Expected variance (' + infoRows.length + ')</summary>';
-        html += '<table class="compare-table compare-table-info"><tbody>';
-        infoRows.forEach(function(row) { html += rowHtml(row); });
-        html += '</tbody></table>';
-        html += '</details>';
-      }
-
       html += '</section>';
     });
 
     if (renderedGroups === 0) {
-      html += '<p class="compare-findings-empty">No field-level differences to show.</p>';
+      if (flaggedTotal === 0 && result.structure.length === 0) {
+        html += '<p class="compare-findings-empty">No structural differences found. ' +
+                'The two messages have the same shape &mdash; only their values differ.</p>';
+      } else {
+        html += '<p class="compare-findings-empty">No field-level differences to show.</p>';
+      }
     }
 
     html += '</div>';
@@ -1155,16 +977,9 @@ const HL7Diff = (function() {
       ? { a: escapeHtml(row.valueA), b: escapeHtml(row.valueB) }
       : highlightPair(row.valueA, row.valueB);
 
-    const sevClass = row.severity === 'none' ? 'identical' : row.severity;
+    const sevClass = row.severity === 'none' ? 'unflagged' : row.severity;
 
-    // Only a plain value difference can be demoted by a rule. Presence, type,
-    // and malformed-data differences are reported regardless of the rules, and
-    // critical routing fields are never demoted - so offering the button there
-    // would promise something it cannot deliver.
-    const ruleCanApply = row.kind === 'value' && !row.critical;
-
-    return '<tr class="compare-row sev-' + sevClass + ' kind-' + row.kind + '" data-address="' +
-           escapeHtml(ruleAddress(row.displayAddress)) + '">' +
+    return '<tr class="compare-row sev-' + sevClass + ' kind-' + row.kind + '">' +
            '<td class="col-addr">' +
              '<span class="compare-addr">' + escapeHtml(row.displayAddress) + '</span>' +
              (row.label ? '<span class="compare-addr-label">' + escapeHtml(row.label) + '</span>' : '') +
@@ -1172,16 +987,10 @@ const HL7Diff = (function() {
            '<td class="col-val side-a">' + valueCell(row.valueA, hl.a) + '</td>' +
            '<td class="col-val side-b">' + valueCell(row.valueB, hl.b) + '</td>' +
            '<td class="col-verdict">' +
-             (row.severity === 'none'
-               ? '<span class="compare-kind-badge">Identical</span>'
-               : '<span class="compare-kind-badge kind-' + row.kind + '">' +
-                 escapeHtml(KIND_LABELS[row.kind] || row.kind) + '</span>' +
-                 (row.detail ? '<span class="compare-verdict-detail">' + escapeHtml(row.detail) + '</span>' : '') +
-                 (row.note ? '<span class="compare-verdict-note">' + escapeHtml(row.note) + '</span>' : '') +
-                 (ruleCanApply
-                   ? '<button type="button" class="compare-ignore-btn" ' +
-                     'title="Treat this field as expected-to-vary">Expect variance</button>'
-                   : '')) +
+             '<span class="compare-kind-badge kind-' + row.kind + '">' +
+             escapeHtml(KIND_LABELS[row.kind] || row.kind) + '</span>' +
+             (row.detail ? '<span class="compare-verdict-detail">' + escapeHtml(row.detail) + '</span>' : '') +
+             (row.note ? '<span class="compare-verdict-note">' + escapeHtml(row.note) + '</span>' : '') +
            '</td>' +
            '</tr>';
   }
@@ -1199,12 +1008,7 @@ const HL7Diff = (function() {
     render: render,
     buildReport: buildReport,
     parseMessages: parseMessages,
-    signature: signature,
-    loadVolatileRules: loadVolatileRules,
-    saveVolatileRules: saveVolatileRules,
-    resetVolatileRules: resetVolatileRules,
-    ruleAddress: ruleAddress,
-    DEFAULT_VOLATILE_RULES: DEFAULT_VOLATILE_RULES
+    signature: signature
   };
 
 })();

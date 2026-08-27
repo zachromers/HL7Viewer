@@ -43,15 +43,8 @@
   const comparePaneA = document.getElementById('comparePaneA');
   const comparePaneB = document.getElementById('comparePaneB');
   const compareRunBtn = document.getElementById('compareRunBtn');
-  const compareSwapBtn = document.getElementById('compareSwapBtn');
-  const compareRulesToggle = document.getElementById('compareRulesToggle');
-  const compareRulesSection = document.getElementById('compareRulesSection');
-  const compareRulesInput = document.getElementById('compareRulesInput');
-  const compareRulesSaveBtn = document.getElementById('compareRulesSaveBtn');
-  const compareRulesResetBtn = document.getElementById('compareRulesResetBtn');
-  const compareRulesStatus = document.getElementById('compareRulesStatus');
   const compareResults = document.getElementById('compareResults');
-  const compareShowIdentical = document.getElementById('compareShowIdentical');
+  const compareShowUnflagged = document.getElementById('compareShowUnflagged');
 
   // DOM Elements - Statistics
   const statsPanel = document.getElementById('statsPanel');
@@ -765,7 +758,6 @@
   // COMPARE HANDLERS
   // ========================================
 
-  let compareVolatileRules = HL7Diff.loadVolatileRules();
   let lastCompareResult = null;
 
   /**
@@ -812,14 +804,14 @@
       return;
     }
 
-    const result = HL7Diff.compare(a, b, { volatileRules: compareVolatileRules });
+    const result = HL7Diff.compare(a, b);
     lastCompareResult = result;
-    HL7Diff.render(result, compareResults, { showIdentical: compareShowIdentical.checked });
+    HL7Diff.render(result, compareResults, { showUnflagged: compareShowUnflagged.checked });
   }
 
   function rerenderComparison() {
     if (!lastCompareResult) return;
-    HL7Diff.render(lastCompareResult, compareResults, { showIdentical: compareShowIdentical.checked });
+    HL7Diff.render(lastCompareResult, compareResults, { showUnflagged: compareShowUnflagged.checked });
   }
 
   function clearComparison() {
@@ -904,80 +896,15 @@
 
   compareRunBtn.addEventListener('click', runComparison);
 
-  compareSwapBtn.addEventListener('click', function() {
-    const tmp = compareInputA.value;
-    compareInputA.value = compareInputB.value;
-    compareInputB.value = tmp;
-    refreshCompareStatuses();
-    if (lastCompareResult) {
-      runComparison();
-    }
-  });
 
-  compareShowIdentical.addEventListener('change', function() {
-    localStorage.setItem('hl7viewer_compareShowIdentical', compareShowIdentical.checked);
+  compareShowUnflagged.addEventListener('change', function() {
+    localStorage.setItem('hl7viewer_compareShowUnflagged', compareShowUnflagged.checked);
     rerenderComparison();
-  });
-
-  // ---- Expected-variance rules ----
-
-  function renderRulesTextarea() {
-    compareRulesInput.value = compareVolatileRules.join('\n');
-  }
-
-  function readRulesTextarea() {
-    return compareRulesInput.value
-      .split(/\r\n|\n|\r/)
-      .map(function(line) { return line.trim(); })
-      .filter(function(line) { return line.length > 0; });
-  }
-
-  function flashRulesStatus(text) {
-    compareRulesStatus.textContent = text;
-    setTimeout(function() { compareRulesStatus.textContent = ''; }, 2500);
-  }
-
-  compareRulesToggle.addEventListener('click', function() {
-    compareRulesSection.open = !compareRulesSection.open;
-    if (compareRulesSection.open) {
-      compareRulesSection.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    }
-  });
-
-  compareRulesSaveBtn.addEventListener('click', function() {
-    compareVolatileRules = readRulesTextarea();
-    HL7Diff.saveVolatileRules(compareVolatileRules);
-    flashRulesStatus('Saved.');
-    if (lastCompareResult) {
-      runComparison();
-    }
-  });
-
-  compareRulesResetBtn.addEventListener('click', function() {
-    compareVolatileRules = HL7Diff.resetVolatileRules();
-    renderRulesTextarea();
-    flashRulesStatus('Reset to defaults.');
-    if (lastCompareResult) {
-      runComparison();
-    }
   });
 
   // ---- Result actions (delegated; results are re-rendered on every run) ----
 
   compareResults.addEventListener('click', function(e) {
-    const ignoreBtn = e.target.closest('.compare-ignore-btn');
-    if (ignoreBtn) {
-      const row = ignoreBtn.closest('.compare-row');
-      if (!row) return;
-      const address = row.dataset.address;
-      if (address && compareVolatileRules.indexOf(address) === -1) {
-        compareVolatileRules.push(address);
-        HL7Diff.saveVolatileRules(compareVolatileRules);
-        renderRulesTextarea();
-        runComparison();
-      }
-      return;
-    }
 
     if (e.target.closest('#compareCopyBtn')) {
       if (!lastCompareResult) return;
@@ -1052,8 +979,7 @@
   loadSettings();
 
   // Initialize the compare page
-  compareShowIdentical.checked = localStorage.getItem('hl7viewer_compareShowIdentical') === 'true';
-  renderRulesTextarea();
+  compareShowUnflagged.checked = localStorage.getItem('hl7viewer_compareShowUnflagged') === 'true';
   refreshCompareStatuses();
 
   // Initialize page mode

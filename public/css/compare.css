@@ -192,74 +192,6 @@
 }
 
 /* ========================================
-   RULES EDITOR
-   ======================================== */
-
-.compare-rules {
-  background-color: #252526;
-  border: 1px solid #3c3c3c;
-  border-radius: 8px;
-  padding: 12px 14px;
-  margin-bottom: 20px;
-}
-
-.compare-rules > summary {
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 600;
-  color: #cccccc;
-  user-select: none;
-}
-
-.compare-rules > summary:hover {
-  color: #4fc1ff;
-}
-
-.compare-rules-help {
-  font-size: 12px;
-  color: #999999;
-  line-height: 1.6;
-  margin: 12px 0;
-  max-width: 900px;
-}
-
-.compare-rules-help code {
-  font-family: 'Consolas', 'Courier New', monospace;
-  color: #ce9178;
-}
-
-.compare-rules-input {
-  width: 100%;
-  min-height: 140px;
-  resize: vertical;
-  padding: 10px;
-  background-color: #1e1e1e;
-  border: 1px solid #3c3c3c;
-  border-radius: 4px;
-  color: #d4d4d4;
-  font-family: 'Consolas', 'Courier New', monospace;
-  font-size: 12px;
-  line-height: 1.5;
-}
-
-.compare-rules-input:focus {
-  outline: none;
-  border-color: #0e639c;
-}
-
-.compare-rules-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.compare-rules-status {
-  font-size: 12px;
-  color: #6a9955;
-}
-
-/* ========================================
    RESULTS - SUMMARY
    ======================================== */
 
@@ -336,8 +268,7 @@
 .compare-chip.chip-high { border-top-color: #f48771; }
 .compare-chip.chip-medium { border-top-color: #dcdcaa; }
 .compare-chip.chip-low { border-top-color: #4fc1ff; }
-.compare-chip.chip-info { border-top-color: #808080; }
-.compare-chip.chip-identical { border-top-color: #6a9955; }
+.compare-chip.chip-unflagged { border-top-color: #6a9955; }
 
 .compare-summary-actions {
   display: flex;
@@ -373,21 +304,16 @@
   border-bottom: 1px solid #3c3c3c;
 }
 
-.compare-findings {
-  margin-bottom: 24px;
-}
-
-.compare-findings-list {
+.compare-structure {
   list-style: none;
-  counter-reset: finding;
+  margin-bottom: 16px;
 }
 
-.compare-finding {
-  display: grid;
-  grid-template-columns: 70px 150px 1fr;
+.compare-structure-item {
+  display: flex;
+  align-items: center;
   gap: 10px;
-  align-items: start;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background-color: #252526;
   border: 1px solid #3c3c3c;
   border-left-width: 3px;
@@ -397,21 +323,13 @@
   line-height: 1.5;
 }
 
-.compare-finding.sev-high { border-left-color: #f48771; }
-.compare-finding.sev-medium { border-left-color: #dcdcaa; }
-.compare-finding.sev-low { border-left-color: #4fc1ff; }
+.compare-structure-item.sev-high { border-left-color: #f48771; }
+.compare-structure-item.sev-medium { border-left-color: #dcdcaa; }
+.compare-structure-item.sev-low { border-left-color: #4fc1ff; }
 
-.compare-finding-text {
+.compare-structure-text {
   color: #d4d4d4;
   word-break: break-word;
-}
-
-.compare-finding-note {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: #999999;
-  font-style: italic;
 }
 
 .compare-sev-badge {
@@ -456,13 +374,13 @@
 }
 
 .compare-kind-badge.kind-shape,
+.compare-kind-badge.kind-identity,
 .compare-kind-badge.kind-malformed {
   background-color: rgba(197, 134, 192, 0.18);
   color: #c586c0;
 }
 
-.compare-kind-badge.kind-precision,
-.compare-kind-badge.kind-value {
+.compare-kind-badge.kind-precision {
   background-color: rgba(220, 220, 170, 0.15);
   color: #dcdcaa;
 }
@@ -555,7 +473,7 @@
 
 .compare-row.sev-high { background-color: rgba(244, 135, 113, 0.06); }
 .compare-row.sev-medium { background-color: rgba(220, 220, 170, 0.05); }
-.compare-row.sev-identical { opacity: 0.55; }
+.compare-row.sev-unflagged { opacity: 0.55; }
 
 .compare-row:hover { background-color: #2d2d30; }
 
@@ -614,45 +532,6 @@
   line-height: 1.5;
 }
 
-.compare-ignore-btn {
-  display: inline-block;
-  margin-top: 6px;
-  padding: 3px 8px;
-  font-size: 10px;
-  background: none;
-  border: 1px solid #3c3c3c;
-  border-radius: 3px;
-  color: #999999;
-  cursor: pointer;
-  font-family: inherit;
-  transition: all 0.2s ease;
-}
-
-.compare-ignore-btn:hover {
-  border-color: #0e639c;
-  color: #4fc1ff;
-}
-
-.compare-expected {
-  border-top: 1px solid #3c3c3c;
-}
-
-.compare-expected > summary {
-  padding: 8px 14px;
-  font-size: 12px;
-  color: #999999;
-  cursor: pointer;
-  user-select: none;
-}
-
-.compare-expected > summary:hover {
-  color: #cccccc;
-}
-
-.compare-table-info .compare-row {
-  opacity: 0.75;
-}
-
 /* ========================================
    LIGHT THEME
    ======================================== */
@@ -665,20 +544,17 @@
   .compare-intro p,
   .compare-hint,
   .compare-pane-status,
-  .compare-rules-help,
   .compare-chip-label,
   .compare-group-count,
   .compare-addr-label,
-  .compare-verdict-detail,
-  .compare-finding-note {
+  .compare-verdict-detail {
     color: #666666;
   }
 
   .compare-pane,
-  .compare-rules,
   .compare-no-content,
   .compare-findings-empty,
-  .compare-finding,
+  .compare-structure-item,
   .compare-group,
   .compare-chip {
     background-color: #f8f8f8;
@@ -699,15 +575,13 @@
     color: #0066cc;
   }
 
-  .compare-textarea,
-  .compare-rules-input {
+  .compare-textarea {
     background-color: #ffffff;
     border-color: #cccccc;
     color: #333333;
   }
 
-  .compare-textarea:focus,
-  .compare-rules-input:focus {
+  .compare-textarea:focus {
     border-color: #0066cc;
   }
 
@@ -744,23 +618,13 @@
     color: #888888;
   }
 
-  .compare-rules > summary,
   .compare-section-title,
   .compare-group-name {
     color: #333333;
   }
 
-  .compare-rules > summary:hover {
-    color: #0066cc;
-  }
 
-  .compare-rules-help code {
-    color: #a31515;
-  }
 
-  .compare-rules-status {
-    color: #2e7d32;
-  }
 
   .compare-error {
     background-color: rgba(200, 40, 20, 0.06);
@@ -781,14 +645,13 @@
   .compare-chip.chip-high { border-top-color: #c62828; }
   .compare-chip.chip-medium { border-top-color: #b48200; }
   .compare-chip.chip-low { border-top-color: #0066cc; }
-  .compare-chip.chip-info { border-top-color: #999999; }
-  .compare-chip.chip-identical { border-top-color: #2e7d32; }
+  .compare-chip.chip-unflagged { border-top-color: #2e7d32; }
 
-  .compare-finding.sev-high { border-left-color: #c62828; }
-  .compare-finding.sev-medium { border-left-color: #b48200; }
-  .compare-finding.sev-low { border-left-color: #0066cc; }
+  .compare-structure-item.sev-high { border-left-color: #c62828; }
+  .compare-structure-item.sev-medium { border-left-color: #b48200; }
+  .compare-structure-item.sev-low { border-left-color: #0066cc; }
 
-  .compare-finding-text,
+  .compare-structure-text,
   .compare-table .col-val {
     color: #333333;
   }
@@ -819,13 +682,13 @@
   }
 
   .compare-kind-badge.kind-shape,
+  .compare-kind-badge.kind-identity,
   .compare-kind-badge.kind-malformed {
     background-color: rgba(136, 60, 150, 0.12);
     color: #883c96;
   }
 
-  .compare-kind-badge.kind-precision,
-  .compare-kind-badge.kind-value {
+  .compare-kind-badge.kind-precision {
     background-color: rgba(180, 130, 0, 0.14);
     color: #8a6400;
   }
@@ -881,27 +744,7 @@
     color: #999999;
   }
 
-  .compare-ignore-btn {
-    border-color: #cccccc;
-    color: #666666;
-  }
 
-  .compare-ignore-btn:hover {
-    border-color: #0066cc;
-    color: #0066cc;
-  }
-
-  .compare-expected {
-    border-top-color: #e0e0e0;
-  }
-
-  .compare-expected > summary {
-    color: #666666;
-  }
-
-  .compare-expected > summary:hover {
-    color: #333333;
-  }
 }
 
 /* ========================================
@@ -913,17 +756,12 @@
     grid-template-columns: 1fr;
   }
 
-  /* Stack the finding, but keep the badges sized to their text instead of
-     stretching across the full row. */
-  .compare-finding {
-    display: flex;
+  /* Stack the structure item, keeping badges sized to their text. */
+  .compare-structure-item {
     flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
   }
 
-  .compare-finding-text,
-  .compare-finding-note {
+  .compare-structure-text {
     flex: 1 1 100%;
   }
 

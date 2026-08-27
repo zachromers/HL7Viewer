@@ -99,34 +99,27 @@ Switch to the **Compare** page to diff two HL7 messages and work out why one was
 
 Paste or drop a message into each pane, then click **Compare Messages**. The comparison aligns the two messages segment by segment (matching repeated segments on their Set ID where present, otherwise in order) and walks every field, repetition, component, and subcomponent.
 
-This is not a text diff. Each difference is classified, so fields that are *expected* to vary between two otherwise-equivalent messages stay out of the way:
+**This compares shape, not values.** Two fields holding `M` and `F` are both single-character all-caps alphabetic, so they are not reported as a difference &mdash; and neither are different patient names, IDs, room numbers, or timestamps, as long as they share a shape. That keeps the results focused on structural problems rather than on the fact that you used two different test patients.
 
-| Verdict | Meaning | Severity |
-|---------|---------|----------|
+What *is* reported:
+
+| Difference | Meaning | Severity |
+|------------|---------|----------|
 | Present in one only | Populated in one message, empty or absent in the other | High |
 | Type mismatch | The value changes class &mdash; e.g. numeric in one message, alphanumeric in the other | High |
 | Malformed data | Control characters, non-ASCII, stray whitespace, unterminated escape sequences, or an impossible calendar date on one side only | High |
+| Message identity | `MSH.9` message type / trigger event or `MSH.12` version differs, meaning the two messages are not the same kind of message | High |
 | Precision change | Date/time precision differs (e.g. `20240115` vs `20240115103000`) | Medium |
-| Value differs | Both populated, same type, different text | Medium |
-| Format / Case | Leading-zero padding or letter case only | Low |
-| Expected variance | A value difference on a field known to vary | Info |
+| Letter case | Same text in different case, or a different case pattern (`SMITH` vs `Smith`) | Low |
+| Format | Same type, different formatting &mdash; e.g. leading-zero padding (`00123` vs `123`) | Low |
 
-Alongside the field-by-field comparison it also reports message-level differences: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments that are truncated relative to their counterpart.
-
-Differences in `MSH.2`, `MSH.3`&ndash;`MSH.6`, `MSH.9`, `MSH.11`, and `MSH.12` are promoted to high severity with an explanation, since different routing, message type, processing ID, or HL7 version is a common reason two similar messages are handled differently.
-
-**Expected-variance rules**
-
-Patient IDs, timestamps, control IDs, order numbers, and similar fields ship with a default rule list. A plain value difference on those fields is filed under *Expected variance* and collapsed. Presence differences, type mismatches, and malformed data on those same fields are still reported in full &mdash; so a patient ID that is numeric in one message and alphanumeric in the other is flagged even though the ID itself is expected to differ.
-
-The list is editable under **Expected-Variance Rules** and is saved to LocalStorage. One rule per line, using `SEG.FIELD`, `SEG.FIELD.COMPONENT`, a bare `SEG`, or a wildcard such as `ZPD.*`. Any plain value difference in the results also carries an **Expect variance** button that adds its field to the list.
+Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 
 **Results**
 
-- Summary chips: high, medium, low, expected variance, and identical counts.
-- A severity-ranked **Findings** list stating each difference in plain language.
-- **Field Detail** grouped by segment, showing both values side by side with the differing characters highlighted.
-- **Show Identical Fields** (menu bar) reveals fields that match.
+- Summary chips: high, medium, low, and unflagged counts.
+- **Findings** grouped by segment, showing both values side by side with the differing characters highlighted, plus a plain-language explanation of each difference.
+- **Show Unflagged Fields** (menu bar) reveals fields that are identical, or that differ only in value while sharing a shape.
 - **Copy Report** / **Download Report** produce a plain-text summary. The download is generated in-browser via a blob &mdash; nothing is uploaded.
 
 
@@ -155,8 +148,7 @@ All settings persist across sessions via LocalStorage:
 | View Mode | Tree View / Textual View | Tree View |
 | Hide Empty Fields | On / Off | Off |
 | Batch Size | 20 / 50 / 100 | 20 |
-| Show Identical Fields (Compare) | On / Off | Off |
-| Expected-Variance Rules (Compare) | Editable field list | Built-in defaults |
+| Show Unflagged Fields (Compare) | On / Off | Off |
 
 ## Project Structure
 
