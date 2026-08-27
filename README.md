@@ -124,6 +124,8 @@ The surplus segments are still checked. Having no counterpart of their own, they
 - a field populated that none of them populate (Medium)
 - malformed data, which is judged from the value alone (High)
 
+For these findings the opposite column shows the values from the sibling segments the check was measured against, rather than an empty counterpart &mdash; so a date-typed field flagged in `DG1[4]` displays the dates the other message's `DG1` segments actually carry. That column is tinted and marks distinct values with `|`.
+
 A surplus segment that looks like its siblings reports nothing beyond the count difference. This applies only when the other message has at least one segment of that type; a segment type absent entirely is covered by the segment-missing finding instead. Matched repetitions are compared field by field as normal.
 
 **Results**

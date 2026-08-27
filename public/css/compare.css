@@ -511,6 +511,12 @@
   font-family: 'Segoe UI', 'Arial', sans-serif;
 }
 
+/* Values gathered from sibling segments rather than a direct counterpart. */
+.compare-table .col-val.compare-ref {
+  color: #9cdcfe;
+  border-left: 2px solid #3c3c3c;
+}
+
 .compare-mark {
   background-color: rgba(220, 220, 170, 0.25);
   color: #dcdcaa;
@@ -756,6 +762,11 @@
 
   .compare-empty {
     color: #999999;
+  }
+
+  .compare-table .col-val.compare-ref {
+    color: #0451a5;
+    border-left-color: #e0e0e0;
   }
 
 

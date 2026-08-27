@@ -423,10 +423,16 @@ const HL7Diff = (function() {
     const profile = { total: segments.length, leaves: {} };
     segments.forEach(function(seg) {
       walkSegmentLeaves(msg, seg, function(key, value) {
-        if (!profile.leaves[key]) profile.leaves[key] = { populated: 0, classes: {} };
+        if (!profile.leaves[key]) profile.leaves[key] = { populated: 0, classes: {}, values: [] };
+        const leaf = profile.leaves[key];
         if (value) {
-          profile.leaves[key].populated++;
-          profile.leaves[key].classes[signature(value).cls] = true;
+          leaf.populated++;
+          leaf.classes[signature(value).cls] = true;
+          // Keep the distinct values so the results can show what a finding
+          // was actually measured against.
+          if (leaf.values.indexOf(value) === -1 && leaf.values.length < 12) {
+            leaf.values.push(value);
+          }
         }
       });
     });
@@ -435,6 +441,14 @@ const HL7Diff = (function() {
 
   function classListOf(entry) {
     return Object.keys(entry.classes).join(' or ');
+  }
+
+  /** The sibling values behind a profile finding, for display. */
+  function referenceValues(entry) {
+    if (!entry || entry.values.length === 0) return '';
+    const vals = entry.values;
+    if (vals.length <= 3) return vals.join('  |  ');
+    return vals.slice(0, 3).join('  |  ') + '  |  +' + (vals.length - 3) + ' more';
   }
 
   /**
@@ -451,10 +465,15 @@ const HL7Diff = (function() {
       const addr = segId + '[' + pair.occurrence + '].' + f +
                    (c > 1 || s > 1 ? '.' + c : '') + (s > 1 ? '.' + s : '');
       const entry = profile.leaves[key];
-      const valA = ownSide === 'A' ? value : '';
-      const valB = ownSide === 'A' ? '' : value;
+      // There is no direct counterpart, so the opposite column shows the
+      // sibling values this leaf was actually measured against.
+      const ref = referenceValues(entry);
+      const valA = ownSide === 'A' ? value : ref;
+      const valB = ownSide === 'A' ? ref : value;
 
       function push(verdict) {
+        verdict.profiled = true;
+        verdict.refSide = otherSide;
         addRow(rows, addr, segId, pair.occurrence, f, c > 1 || s > 1 ? c : null, s > 1 ? s : null,
                valA, valB, verdict);
       }
@@ -735,7 +754,9 @@ const HL7Diff = (function() {
       severity: verdict.severity,
       side: verdict.side || null,
       detail: verdict.detail || '',
-      note: verdict.note || null
+      note: verdict.note || null,
+      profiled: !!verdict.profiled,
+      refSide: verdict.refSide || null
     });
   }
 
@@ -1176,19 +1197,28 @@ const HL7Diff = (function() {
   }
 
   function rowHtml(row) {
-    const hl = (row.kind === 'presence' || row.kind === 'identical')
+    // Character-level highlighting only makes sense for a one-to-one
+    // comparison. A profiled row's opposite column holds reference values from
+    // sibling segments, not a counterpart, so leave it plain.
+    const hl = (row.kind === 'presence' || row.kind === 'identical' || row.profiled)
       ? { a: escapeHtml(row.valueA), b: escapeHtml(row.valueB) }
       : highlightPair(row.valueA, row.valueB);
 
     const sevClass = row.severity === 'none' ? 'unflagged' : row.severity;
+
+    const refTitle = ' title="Reference values taken from the other message&#39;s segments of this type"';
+    const aRef = row.refSide === 'A';
+    const bRef = row.refSide === 'B';
 
     return '<tr class="compare-row sev-' + sevClass + ' kind-' + row.kind + '">' +
            '<td class="col-addr">' +
              '<span class="compare-addr">' + escapeHtml(row.displayAddress) + '</span>' +
              (row.label ? '<span class="compare-addr-label">' + escapeHtml(row.label) + '</span>' : '') +
            '</td>' +
-           '<td class="col-val side-a">' + valueCell(row.valueA, hl.a) + '</td>' +
-           '<td class="col-val side-b">' + valueCell(row.valueB, hl.b) + '</td>' +
+           '<td class="col-val side-a' + (aRef ? ' compare-ref' : '') + '"' + (aRef ? refTitle : '') + '>' +
+             valueCell(row.valueA, hl.a) + '</td>' +
+           '<td class="col-val side-b' + (bRef ? ' compare-ref' : '') + '"' + (bRef ? refTitle : '') + '>' +
+             valueCell(row.valueB, hl.b) + '</td>' +
            '<td class="col-verdict">' +
              '<span class="compare-kind-badge kind-' + row.kind + '">' +
              escapeHtml(KIND_LABELS[row.kind] || row.kind) + '</span>' +
