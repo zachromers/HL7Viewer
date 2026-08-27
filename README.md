@@ -132,6 +132,7 @@ A surplus segment that looks like its siblings reports nothing beyond the count 
 
 - Summary chips: high, medium, low, and unflagged counts.
 - **Findings** grouped by segment, showing both values side by side with the differing characters highlighted, plus a plain-language explanation of each difference.
+- Each segment section collapses by clicking its header (or focusing it and pressing <kbd>Enter</kbd>). All sections start expanded; **Expand All** / **Collapse All** operate on every section at once. Collapsed sections stay collapsed when the view refreshes, and reset when a new comparison is run.
 - **Show Unflagged Fields** (menu bar) reveals fields that are identical, or that differ only in value while sharing a shape.
 - **Copy Report** / **Download Report** produce a plain-text summary. The download is generated in-browser via a blob &mdash; nothing is uploaded.
 

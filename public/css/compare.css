@@ -407,6 +407,32 @@
   background-color: #2d2d30;
   border-bottom: 1px solid #3c3c3c;
   flex-wrap: wrap;
+  cursor: pointer;
+  user-select: none;
+}
+
+.compare-group-header:hover {
+  background-color: #37373d;
+}
+
+.compare-group-header:focus-visible {
+  outline: 1px solid #0e639c;
+  outline-offset: -1px;
+}
+
+.compare-group-toggle {
+  font-size: 10px;
+  color: #999999;
+  width: 10px;
+  flex-shrink: 0;
+}
+
+.compare-group.collapsed .compare-group-header {
+  border-bottom-color: transparent;
+}
+
+.compare-group.collapsed .compare-group-body {
+  display: none;
 }
 
 .compare-group-id {
@@ -712,6 +738,18 @@
   .compare-group-header {
     background-color: #eeeeee;
     border-bottom-color: #e0e0e0;
+  }
+
+  .compare-group-header:hover {
+    background-color: #e4e4e4;
+  }
+
+  .compare-group-header:focus-visible {
+    outline-color: #0066cc;
+  }
+
+  .compare-group-toggle {
+    color: #666666;
   }
 
   .compare-group-id,

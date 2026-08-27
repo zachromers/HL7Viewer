@@ -1092,6 +1092,7 @@ const HL7Diff = (function() {
   function render(result, container, viewOptions) {
     if (!container) return;
     const showUnflagged = !!(viewOptions && viewOptions.showUnflagged);
+    const collapsed = (viewOptions && viewOptions.collapsedGroups) || {};
 
     if (result.error) {
       container.innerHTML = '<div class="compare-error">' + escapeHtml(result.error) + '</div>';
@@ -1106,6 +1107,8 @@ const HL7Diff = (function() {
     html += summaryChip('low', result.counts.low, 'Low');
     html += summaryChip('unflagged', result.counts.unflagged, 'Unflagged');
     html += '<div class="compare-summary-actions">' +
+            '<button type="button" class="compare-action-btn" id="compareExpandAllBtn">Expand All</button>' +
+            '<button type="button" class="compare-action-btn" id="compareCollapseAllBtn">Collapse All</button>' +
             '<button type="button" class="compare-action-btn" id="compareCopyBtn">Copy Report</button>' +
             '<button type="button" class="compare-action-btn" id="compareDownloadBtn">Download Report</button>' +
             '</div>';
@@ -1154,8 +1157,14 @@ const HL7Diff = (function() {
                      ' in Message ' + group.otherSide + '</span>';
       }
 
-      html += '<section class="compare-group">';
-      html += '<div class="compare-group-header">' +
+      const groupKey = group.segmentId + '[' + group.occurrence + ']';
+      const isCollapsed = collapsed[groupKey] === true;
+
+      html += '<section class="compare-group' + (isCollapsed ? ' collapsed' : '') +
+              '" data-group="' + escapeHtml(groupKey) + '">';
+      html += '<div class="compare-group-header" role="button" tabindex="0" aria-expanded="' +
+              (isCollapsed ? 'false' : 'true') + '">' +
+              '<span class="compare-group-toggle">' + (isCollapsed ? '▶' : '▼') + '</span>' +
               '<span class="compare-group-id">' + escapeHtml(group.segmentId) + '[' + group.occurrence + ']</span>' +
               '<span class="compare-group-name">' + escapeHtml(group.label) + '</span>' +
               sideBadge +
@@ -1168,6 +1177,7 @@ const HL7Diff = (function() {
               '</span>' +
               '</div>';
 
+      html += '<div class="compare-group-body">';
       html += '<table class="compare-table"><thead><tr>' +
               '<th class="col-addr">Field</th>' +
               '<th class="col-val">Message A</th>' +
@@ -1178,6 +1188,7 @@ const HL7Diff = (function() {
       visibleRows.forEach(function(row) { html += rowHtml(row); });
 
       html += '</tbody></table>';
+      html += '</div>';
       html += '</section>';
     });
 
@@ -1228,6 +1239,44 @@ const HL7Diff = (function() {
            '</tr>';
   }
 
+  /** Expand or collapse one segment section. */
+  function setGroupCollapsed(section, isCollapsed) {
+    if (!section) return;
+    section.classList.toggle('collapsed', isCollapsed);
+    const toggle = section.querySelector('.compare-group-toggle');
+    if (toggle) toggle.innerHTML = isCollapsed ? '▶' : '▼';
+    const header = section.querySelector('.compare-group-header');
+    if (header) header.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+  }
+
+  /** Click handler for segment headers; safe to attach once to the container. */
+  function handleGroupToggle(e) {
+    const header = e.target.closest('.compare-group-header');
+    if (!header) return false;
+    const section = header.closest('.compare-group');
+    if (!section) return false;
+    setGroupCollapsed(section, !section.classList.contains('collapsed'));
+    return true;
+  }
+
+  function setAllGroups(container, expand) {
+    if (!container) return;
+    container.querySelectorAll('.compare-group').forEach(function(section) {
+      setGroupCollapsed(section, !expand);
+    });
+  }
+
+  /** Snapshot which sections are collapsed, so a re-render can restore them. */
+  function getCollapsedGroups(container) {
+    const out = {};
+    if (!container) return out;
+    container.querySelectorAll('.compare-group.collapsed').forEach(function(section) {
+      const key = section.getAttribute('data-group');
+      if (key) out[key] = true;
+    });
+    return out;
+  }
+
   function summaryChip(kind, count, label) {
     return '<div class="compare-chip chip-' + kind + '">' +
            '<span class="compare-chip-count">' + count + '</span>' +
@@ -1241,7 +1290,10 @@ const HL7Diff = (function() {
     render: render,
     buildReport: buildReport,
     parseMessages: parseMessages,
-    signature: signature
+    signature: signature,
+    handleGroupToggle: handleGroupToggle,
+    setAllGroups: setAllGroups,
+    getCollapsedGroups: getCollapsedGroups
   };
 
 })();

@@ -811,7 +811,12 @@
 
   function rerenderComparison() {
     if (!lastCompareResult) return;
-    HL7Diff.render(lastCompareResult, compareResults, { showUnflagged: compareShowUnflagged.checked });
+    // Keep whatever the user has collapsed; only a fresh comparison resets it.
+    const collapsedGroups = HL7Diff.getCollapsedGroups(compareResults);
+    HL7Diff.render(lastCompareResult, compareResults, {
+      showUnflagged: compareShowUnflagged.checked,
+      collapsedGroups: collapsedGroups
+    });
   }
 
   function clearComparison() {
@@ -905,6 +910,20 @@
   // ---- Result actions (delegated; results are re-rendered on every run) ----
 
   compareResults.addEventListener('click', function(e) {
+    if (e.target.closest('#compareExpandAllBtn')) {
+      HL7Diff.setAllGroups(compareResults, true);
+      return;
+    }
+
+    if (e.target.closest('#compareCollapseAllBtn')) {
+      HL7Diff.setAllGroups(compareResults, false);
+      return;
+    }
+
+    if (HL7Diff.handleGroupToggle(e)) {
+      return;
+    }
+
 
     if (e.target.closest('#compareCopyBtn')) {
       if (!lastCompareResult) return;
@@ -916,6 +935,13 @@
       if (!lastCompareResult) return;
       downloadText(HL7Diff.buildReport(lastCompareResult), 'hl7-comparison.txt');
     }
+  });
+
+  compareResults.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    if (!e.target.closest('.compare-group-header')) return;
+    e.preventDefault();
+    HL7Diff.handleGroupToggle(e);
   });
 
   /**
