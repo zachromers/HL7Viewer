@@ -714,12 +714,30 @@ const HL7Diff = (function() {
         }
       }
 
+      // A segment with no counterpart has nothing to compare against, so every
+      // populated field in it would otherwise be reported as "present in one
+      // only". That is just the segment itself restated once per field, and
+      // the segment-level finding above already says it. Keep the rows so the
+      // extra segment's contents can still be inspected under "Show Unflagged
+      // Fields", but stop them counting as differences.
+      const unmatchedSegment = !segA || !segB;
+      if (unmatchedSegment) {
+        const missingSide = segA ? 'B' : 'A';
+        rows.forEach(function(r) {
+          r.kind = 'unmatched';
+          r.severity = 'none';
+          r.side = null;
+          r.detail = 'This segment has no counterpart in Message ' + missingSide + '.';
+        });
+      }
+
       groups.push({
         segmentId: pair.segmentId,
         occurrence: pair.occurrence,
         label: segmentLabel(pair.segmentId),
         presentA: !!segA,
         presentB: !!segB,
+        unmatched: unmatchedSegment,
         rows: rows
       });
     });
@@ -830,6 +848,7 @@ const HL7Diff = (function() {
     whitespace: 'Whitespace',
     identical: 'Identical',
     sameshape: 'Same shape',
+    unmatched: 'No counterpart',
     'segment-presence': 'Segment missing',
     'segment-count': 'Segment count',
     truncation: 'Truncated segment',
@@ -941,7 +960,11 @@ const HL7Diff = (function() {
               '<span class="compare-group-id">' + escapeHtml(group.segmentId) + '[' + group.occurrence + ']</span>' +
               '<span class="compare-group-name">' + escapeHtml(group.label) + '</span>' +
               sideBadge +
-              '<span class="compare-group-count">' + diffCount + ' difference' + (diffCount === 1 ? '' : 's') + '</span>' +
+              '<span class="compare-group-count">' +
+              (group.unmatched
+                ? visibleRows.length + ' field' + (visibleRows.length === 1 ? '' : 's') + ', no counterpart to compare'
+                : diffCount + ' difference' + (diffCount === 1 ? '' : 's')) +
+              '</span>' +
               '</div>';
 
       html += '<table class="compare-table"><thead><tr>' +
