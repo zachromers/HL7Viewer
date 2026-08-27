@@ -107,13 +107,15 @@ What *is* reported:
 |------------|---------|----------|
 | Present in one only | Populated in one message, empty or absent in the other | High |
 | Type mismatch | The value changes class &mdash; e.g. numeric in one message, alphanumeric in the other | High |
-| Malformed data | Control characters, non-ASCII, stray whitespace, unterminated escape sequences, or an impossible calendar date on one side only | High |
+| Malformed data | Control characters, non-ASCII, stray whitespace, or unterminated escape sequences on one side only | High |
 | Message identity | `MSH.9` message type / trigger event or `MSH.12` version differs, meaning the two messages are not the same kind of message | High |
-| Precision change | Date/time precision differs (e.g. `20240115` vs `20240115103000`) | Medium |
+| Precision change | One side carries more date/time precision than the other (e.g. `20240115` vs `20240115103000`) | Medium |
 | Letter case | Same text in different case, or a different case pattern (`SMITH` vs `Smith`) | Low |
 | Format | Same type, different formatting &mdash; e.g. leading-zero padding (`00123` vs `123`) | Low |
 
 A field can be wrong in more than one way at once &mdash; a value can carry malformed data *and* change type &mdash; and every applicable finding is listed against that field, each with its own severity. Data quality is judged per side, so problems in both messages are both reported. The shape checks (type, precision, case, padding) are the exception: once the broad type differs, the finer ones would only restate the same difference, so the first that applies is the one reported.
+
+**Dates.** A digit string matching the HL7 timestamp shape (8, 10, 12, or 14 digits, with optional fractional seconds and UTC offset) is treated as a date or date/time, and a difference in how many digits each side carries is reported as a precision change. Recognition is structural only &mdash; whether the digits form a real calendar date is not checked, so `08272026` and `082620261234` compare as 8-digit and 12-digit timestamps regardless of field order. The trade-off is that a purely numeric identifier of 8, 10, 12, or 14 digits is also read as a timestamp, so an 8-digit account number compared against a 12-digit one reports a precision change.
 
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 

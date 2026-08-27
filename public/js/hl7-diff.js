@@ -172,18 +172,6 @@ const HL7Diff = (function() {
   // VALUE SIGNATURES
   // ========================================
 
-  function isValidDatePart(s) {
-    if (!/^\d{8}$/.test(s)) return false;
-    const y = parseInt(s.substring(0, 4), 10);
-    const m = parseInt(s.substring(4, 6), 10);
-    const d = parseInt(s.substring(6, 8), 10);
-    if (y < 1800 || y > 2200) return false;
-    if (m < 1 || m > 12) return false;
-    if (d < 1 || d > 31) return false;
-    const daysInMonth = new Date(y, m, 0).getDate();
-    return d <= daysInMonth;
-  }
-
   /**
    * Letter-case pattern, so "M" and "F" match but "SMITH" and "Smith" do not.
    * Values with no letters have no case pattern.
@@ -217,8 +205,11 @@ const HL7Diff = (function() {
     const cc = caseClass(v);
 
     // HL7 timestamp forms: YYYYMMDD[HHMM[SS[.S+]]][+/-ZZZZ]
+    // Recognized by structure alone. Whether the digits form a real calendar
+    // date is not this tool's business - what matters is that one message
+    // carries more precision than the other.
     const tsMatch = v.match(/^(\d{8})(\d{2}(?:\d{2}(?:\d{2})?)?)?(\.\d{1,4})?([+-]\d{4})?$/);
-    if (tsMatch && isValidDatePart(tsMatch[1])) {
+    if (tsMatch) {
       if (tsMatch[2] || tsMatch[3] || tsMatch[4]) {
         const precision = 8 + (tsMatch[2] ? tsMatch[2].length : 0);
         return { cls: 'numeric', type: 'datetime', length: len, precision: precision, caseClass: cc, label: 'date/time' };
@@ -273,9 +264,6 @@ const HL7Diff = (function() {
           issues.push('contains an unterminated escape sequence');
         }
       }
-    }
-    if (/^\d{8}$/.test(value) && !isValidDatePart(value)) {
-      issues.push('looks like a date but is not a valid calendar date');
     }
     return issues;
   }
@@ -614,15 +602,17 @@ const HL7Diff = (function() {
       return verdicts;
     }
 
-    if (sigA.type === 'datetime' || sigB.type === 'datetime' || sigA.type === 'date' || sigB.type === 'date') {
-      if (sigA.type !== sigB.type || sigA.precision !== sigB.precision) {
-        verdicts.push({
-          kind: 'precision', severity: 'medium', sigA: sigA, sigB: sigB,
-          detail: 'Date/time precision differs: Message A is ' + describeSignature(sigA) +
-                  ', Message B is ' + describeSignature(sigB) + '.'
-        });
-        return verdicts;
-      }
+    const aIsTimestamp = sigA.type === 'date' || sigA.type === 'datetime';
+    const bIsTimestamp = sigB.type === 'date' || sigB.type === 'datetime';
+
+    if (aIsTimestamp && bIsTimestamp && sigA.precision !== sigB.precision) {
+      verdicts.push({
+        kind: 'precision', severity: 'medium', sigA: sigA, sigB: sigB,
+        detail: 'Date/time precision differs: Message A carries ' + sigA.precision +
+                ' digits (' + describeSignature(sigA) + '), Message B carries ' +
+                sigB.precision + ' digits (' + describeSignature(sigB) + ').'
+      });
+      return verdicts;
     }
 
     if (sigA.type !== sigB.type) {
