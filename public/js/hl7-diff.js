@@ -470,60 +470,61 @@ const HL7Diff = (function() {
       const ref = referenceValues(entry);
       const valA = ownSide === 'A' ? value : ref;
       const valB = ownSide === 'A' ? ref : value;
+      const verdicts = [];
 
-      function push(verdict) {
-        verdict.profiled = true;
-        verdict.refSide = otherSide;
-        addRow(rows, addr, segId, pair.occurrence, f, c > 1 || s > 1 ? c : null, s > 1 ? s : null,
-               valA, valB, verdict);
-      }
-
-      // Malformed data is judged from the value alone.
+      // Malformed data is judged from the value alone, and stacks with
+      // whatever the profile comparison finds.
       const issues = valueIssues(value, msg);
       if (issues.length) {
-        push({
+        verdicts.push({
           kind: 'malformed',
           severity: 'high',
           detail: 'Message ' + ownSide + ' ' + issues.join('; ') + '.'
         });
-        return;
       }
 
       if (!value) {
         // Empty here, but every sibling in the other message populates it.
         if (entry && entry.populated === profile.total && profile.total > 0) {
-          push({
+          verdicts.push({
             kind: 'profile-missing',
             severity: 'medium',
             detail: 'Empty here, but populated in all ' + others + '.'
           });
         }
-        return;
-      }
-
-      // Populated here, but never populated in any sibling.
-      if (!entry || entry.populated === 0) {
-        push({
+      } else if (!entry || entry.populated === 0) {
+        // Populated here, but never populated in any sibling.
+        verdicts.push({
           kind: 'profile-extra',
           severity: 'medium',
           detail: 'Populated here, but empty in all ' + others + '.'
         });
-        return;
+      } else {
+        const cls = signature(value).cls;
+        if (!entry.classes[cls]) {
+          verdicts.push({
+            kind: 'shape',
+            severity: 'high',
+            detail: 'This value is ' + describeSignature(signature(value)) +
+                    ', but the ' + others + (profile.total === 1 ? ' uses ' : ' use ') +
+                    classListOf(entry) + ' here.'
+          });
+        } else if (verdicts.length === 0) {
+          verdicts.push({
+            kind: 'unmatched',
+            severity: 'none',
+            detail: 'Consistent with the ' + others + '.'
+          });
+        }
       }
 
-      // Populated on both sides - does the type match what siblings use?
-      const cls = signature(value).cls;
-      if (!entry.classes[cls]) {
-        push({
-          kind: 'shape',
-          severity: 'high',
-          detail: 'This value is ' + describeSignature(signature(value)) +
-                  ', but the ' + others + ' use ' + classListOf(entry) + ' here.'
-        });
-        return;
-      }
-
-      push({ kind: 'unmatched', severity: 'none', detail: 'Consistent with the ' + others + '.' });
+      if (verdicts.length === 0) return;
+      verdicts.forEach(function(v) {
+        v.profiled = true;
+        v.refSide = otherSide;
+      });
+      addRow(rows, addr, segId, pair.occurrence, f, c > 1 || s > 1 ? c : null, s > 1 ? s : null,
+             valA, valB, verdicts);
     });
   }
 
@@ -533,126 +534,136 @@ const HL7Diff = (function() {
 
   const SEVERITY_ORDER = { high: 0, medium: 1, low: 2, none: 3 };
 
+  function worstSeverity(verdicts) {
+    let worst = 'none';
+    verdicts.forEach(function(v) {
+      if (SEVERITY_ORDER[v.severity] < SEVERITY_ORDER[worst]) worst = v.severity;
+    });
+    return worst;
+  }
+
   /**
-   * Compare two leaf values and produce a verdict.
-   * Values that differ but share a shape are NOT a difference.
+   * Compare two leaf values and produce every verdict that applies.
+   * A field can be wrong in more than one way at once - a value can carry
+   * malformed data AND change type - so checks accumulate rather than
+   * stopping at the first match. Only the shape-family checks stay mutually
+   * exclusive, since once the broad type differs the finer comparisons
+   * (precision, case, padding) just describe the same difference again.
    */
   function classifyLeaf(addr, rawA, rawB, ctx) {
     const a = rawA == null ? '' : rawA;
     const b = rawB == null ? '' : rawB;
+    const verdicts = [];
 
+    // Data quality, judged per side so problems in both are both reported.
     const issuesA = valueIssues(a, ctx.msgA);
     const issuesB = valueIssues(b, ctx.msgB);
     const onlyA = issuesA.filter(function(i) { return issuesB.indexOf(i) === -1; });
     const onlyB = issuesB.filter(function(i) { return issuesA.indexOf(i) === -1; });
 
-    // Malformed data on one side only outranks everything else.
-    if (onlyA.length || onlyB.length) {
-      const side = onlyB.length ? 'B' : 'A';
-      const list = onlyB.length ? onlyB : onlyA;
-      return {
-        kind: 'malformed',
-        severity: 'high',
-        side: side,
-        detail: 'Message ' + side + ' ' + list.join('; ') + '.'
-      };
+    if (onlyA.length) {
+      verdicts.push({
+        kind: 'malformed', severity: 'high', side: 'A',
+        detail: 'Message A ' + onlyA.join('; ') + '.'
+      });
     }
-
-    if (a === b) return { kind: 'identical', severity: 'none' };
+    if (onlyB.length) {
+      verdicts.push({
+        kind: 'malformed', severity: 'high', side: 'B',
+        detail: 'Message B ' + onlyB.join('; ') + '.'
+      });
+    }
 
     const aT = a.trim();
     const bT = b.trim();
 
-    if (!aT && !bT) return { kind: 'identical', severity: 'none' };
+    if (a === b || (!aT && !bT)) {
+      if (verdicts.length === 0) verdicts.push({ kind: 'identical', severity: 'none' });
+      return verdicts;
+    }
 
     if (!aT || !bT) {
       const side = aT ? 'A' : 'B';
-      return {
-        kind: 'presence',
-        severity: 'high',
-        side: side,
+      verdicts.push({
+        kind: 'presence', severity: 'high', side: side,
         detail: 'Populated in Message ' + side + ' only.'
-      };
+      });
+      return verdicts;
     }
 
     if (aT === bT) {
-      return {
-        kind: 'whitespace',
-        severity: 'low',
-        detail: 'Values match except for surrounding whitespace.'
-      };
+      // Only reachable when the whitespace difference was not already
+      // reported as a data-quality issue above.
+      if (verdicts.length === 0) {
+        verdicts.push({
+          kind: 'whitespace', severity: 'low',
+          detail: 'Values match except for surrounding whitespace.'
+        });
+      }
+      return verdicts;
     }
 
     const sigA = signature(aT);
     const sigB = signature(bT);
 
     if (sigA.cls !== sigB.cls) {
-      return {
-        kind: 'shape',
-        severity: 'high',
-        sigA: sigA,
-        sigB: sigB,
+      verdicts.push({
+        kind: 'shape', severity: 'high', sigA: sigA, sigB: sigB,
         detail: 'Message A is ' + describeSignature(sigA) + ', Message B is ' + describeSignature(sigB) + '.'
-      };
+      });
+      return verdicts;
     }
 
     if (sigA.type === 'datetime' || sigB.type === 'datetime' || sigA.type === 'date' || sigB.type === 'date') {
       if (sigA.type !== sigB.type || sigA.precision !== sigB.precision) {
-        return {
-          kind: 'precision',
-          severity: 'medium',
-          sigA: sigA,
-          sigB: sigB,
+        verdicts.push({
+          kind: 'precision', severity: 'medium', sigA: sigA, sigB: sigB,
           detail: 'Date/time precision differs: Message A is ' + describeSignature(sigA) +
                   ', Message B is ' + describeSignature(sigB) + '.'
-        };
+        });
+        return verdicts;
       }
     }
 
     if (sigA.type !== sigB.type) {
-      return {
-        kind: 'format',
-        severity: 'low',
-        sigA: sigA,
-        sigB: sigB,
+      verdicts.push({
+        kind: 'format', severity: 'low', sigA: sigA, sigB: sigB,
         detail: 'Same broad type but different format: ' + describeSignature(sigA) + ' vs ' + describeSignature(sigB) + '.'
-      };
+      });
+      return verdicts;
     }
 
     if (aT.toUpperCase() === bT.toUpperCase()) {
-      return {
-        kind: 'case',
-        severity: 'low',
-        detail: 'Same text, different letter case.'
-      };
+      verdicts.push({ kind: 'case', severity: 'low', detail: 'Same text, different letter case.' });
+      return verdicts;
     }
 
     if (sigA.caseClass !== sigB.caseClass) {
-      return {
-        kind: 'case',
-        severity: 'low',
+      verdicts.push({
+        kind: 'case', severity: 'low',
         detail: 'Letter case pattern differs: Message A is ' + CASE_LABELS[sigA.caseClass] +
                 ', Message B is ' + CASE_LABELS[sigB.caseClass] + '.'
-      };
+      });
+      return verdicts;
     }
 
     if (sigA.cls === 'numeric' && aT.replace(/^[+-]?0+/, '') === bT.replace(/^[+-]?0+/, '')) {
-      return {
-        kind: 'format',
-        severity: 'low',
+      verdicts.push({
+        kind: 'format', severity: 'low',
         detail: 'Same number, different leading-zero padding.'
-      };
+      });
+      return verdicts;
     }
 
-    // A different message type or version means these are not the same kind
-    // of message, which is structural rather than a mere value change.
     const note = identityNote(addr);
     if (note) {
-      return { kind: 'identity', severity: 'high', detail: 'Values differ.', note: note };
+      verdicts.push({ kind: 'identity', severity: 'high', detail: 'Values differ.', note: note });
+      return verdicts;
     }
 
     // Same shape, different value - deliberately not a difference.
-    return { kind: 'sameshape', severity: 'none' };
+    if (verdicts.length === 0) verdicts.push({ kind: 'sameshape', severity: 'none' });
+    return verdicts;
   }
 
   /**
@@ -732,12 +743,23 @@ const HL7Diff = (function() {
     }
   }
 
-  function addRow(rows, addr, segmentId, occurrence, fieldNum, compNum, subNum, valueA, valueB, verdict) {
+  function addRow(rows, addr, segmentId, occurrence, fieldNum, compNum, subNum, valueA, valueB, verdicts) {
+    const list = Array.isArray(verdicts) ? verdicts : [verdicts];
+    if (list.length === 0) return;
+
+    const severity = worstSeverity(list);
+
     // Suppress rows that are empty on both sides - they are just padding
     // created by unequal field counts.
-    if (verdict.severity === 'none' && !String(valueA).trim() && !String(valueB).trim()) {
+    if (severity === 'none' && !String(valueA).trim() && !String(valueB).trim()) {
       return;
     }
+
+    // The most severe verdict drives the row's styling and grouping.
+    const primary = list.reduce(function(best, v) {
+      return SEVERITY_ORDER[v.severity] < SEVERITY_ORDER[best.severity] ? v : best;
+    }, list[0]);
+    const withRef = list.filter(function(v) { return v.refSide; })[0];
 
     rows.push({
       address: addr,
@@ -750,13 +772,14 @@ const HL7Diff = (function() {
       label: fieldLabel(segmentId, fieldNum, compNum, subNum),
       valueA: valueA,
       valueB: valueB,
-      kind: verdict.kind,
-      severity: verdict.severity,
-      side: verdict.side || null,
-      detail: verdict.detail || '',
-      note: verdict.note || null,
-      profiled: !!verdict.profiled,
-      refSide: verdict.refSide || null
+      verdicts: list,
+      kind: primary.kind,
+      severity: severity,
+      side: primary.side || null,
+      detail: primary.detail || '',
+      note: primary.note || null,
+      profiled: list.some(function(v) { return v.profiled; }),
+      refSide: withRef ? withRef.refSide : null
     });
   }
 
@@ -888,7 +911,8 @@ const HL7Diff = (function() {
         const shorter = maxA < maxB ? 'A' : 'B';
         const longer = maxA < maxB ? 'B' : 'A';
         const tailPopulated = rows.some(function(r) {
-          return r.kind === 'presence' && r.fieldNum > Math.min(maxA, maxB);
+          return r.fieldNum > Math.min(maxA, maxB) &&
+                 r.verdicts.some(function(v) { return v.kind === 'presence'; });
         });
         if (tailPopulated) {
           structure.push({
@@ -941,8 +965,10 @@ const HL7Diff = (function() {
     structure.forEach(function(s) { counts[s.severity]++; });
     groups.forEach(function(g) {
       g.rows.forEach(function(r) {
-        if (r.severity === 'none') counts.unflagged++;
-        else counts[r.severity]++;
+        r.verdicts.forEach(function(v) {
+          if (v.severity === 'none') counts.unflagged++;
+          else counts[v.severity]++;
+        });
       });
     });
 
@@ -1001,12 +1027,14 @@ const HL7Diff = (function() {
       lines.push(g.segmentId + '[' + g.occurrence + '] - ' + g.label +
                  (!g.presentA ? '  (Message B only)' : '') + (!g.presentB ? '  (Message A only)' : ''));
       diffRows.forEach(function(r) {
-        lines.push('  ' + r.displayAddress + '  [' + r.kind + '/' + r.severity + ']' +
-                   (r.label ? '  ' + r.label : ''));
+        lines.push('  ' + r.displayAddress + (r.label ? '  ' + r.label : ''));
         lines.push('    A: ' + (r.valueA || '(empty)'));
         lines.push('    B: ' + (r.valueB || '(empty)'));
-        if (r.detail) lines.push('    ' + r.detail);
-        if (r.note) lines.push('    Note: ' + r.note);
+        r.verdicts.forEach(function(v) {
+          if (v.severity === 'none') return;
+          lines.push('    [' + v.kind + '/' + v.severity + '] ' + (v.detail || ''));
+          if (v.note) lines.push('      Note: ' + v.note);
+        });
       });
     });
 
@@ -1231,10 +1259,14 @@ const HL7Diff = (function() {
            '<td class="col-val side-b' + (bRef ? ' compare-ref' : '') + '"' + (bRef ? refTitle : '') + '>' +
              valueCell(row.valueB, hl.b) + '</td>' +
            '<td class="col-verdict">' +
-             '<span class="compare-kind-badge kind-' + row.kind + '">' +
-             escapeHtml(KIND_LABELS[row.kind] || row.kind) + '</span>' +
-             (row.detail ? '<span class="compare-verdict-detail">' + escapeHtml(row.detail) + '</span>' : '') +
-             (row.note ? '<span class="compare-verdict-note">' + escapeHtml(row.note) + '</span>' : '') +
+             row.verdicts.map(function(v) {
+               return '<div class="compare-verdict">' +
+                 '<span class="compare-kind-badge kind-' + v.kind + '">' +
+                 escapeHtml(KIND_LABELS[v.kind] || v.kind) + '</span>' +
+                 (v.detail ? '<span class="compare-verdict-detail">' + escapeHtml(v.detail) + '</span>' : '') +
+                 (v.note ? '<span class="compare-verdict-note">' + escapeHtml(v.note) + '</span>' : '') +
+                 '</div>';
+             }).join('') +
            '</td>' +
            '</tr>';
   }

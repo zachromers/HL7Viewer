@@ -113,6 +113,8 @@ What *is* reported:
 | Letter case | Same text in different case, or a different case pattern (`SMITH` vs `Smith`) | Low |
 | Format | Same type, different formatting &mdash; e.g. leading-zero padding (`00123` vs `123`) | Low |
 
+A field can be wrong in more than one way at once &mdash; a value can carry malformed data *and* change type &mdash; and every applicable finding is listed against that field, each with its own severity. Data quality is judged per side, so problems in both messages are both reported. The shape checks (type, precision, case, padding) are the exception: once the broad type differs, the finer ones would only restate the same difference, so the first that applies is the one reported.
+
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 
 **Repeated segments.** When one message carries more repetitions of a segment than the other (say two `DG1` segments versus four), the mismatch is reported once as a segment count difference, not once per field of every surplus segment.

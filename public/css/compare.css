@@ -555,6 +555,13 @@
   color: #f48771;
 }
 
+/* Stacked verdicts when one field is wrong in more than one way. */
+.compare-verdict + .compare-verdict {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #3c3c3c;
+}
+
 .compare-verdict-detail {
   display: block;
   margin-top: 4px;
@@ -796,6 +803,10 @@
 
   .compare-verdict-note {
     color: #8a6400;
+  }
+
+  .compare-verdict + .compare-verdict {
+    border-top-color: #e0e0e0;
   }
 
   .compare-empty {
