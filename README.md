@@ -115,7 +115,7 @@ What *is* reported:
 
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 
-**Repeated segments.** When one message carries more repetitions of a segment than the other (say two `DG1` segments versus four), the mismatch is reported once as a segment count difference. The fields inside the surplus segments are *not* each reported as missing &mdash; there is nothing to compare them against, and the count difference already says it. Matched repetitions are still compared field by field, so a type mismatch inside `DG1[2]` is reported normally. The surplus segments' contents remain visible under **Show Unflagged Fields**.
+**Repeated segments.** When one message carries more repetitions of a segment than the other (say two `DG1` segments versus four), the mismatch is reported once as a segment count difference. The fields inside the surplus segments are *not* each reported as missing &mdash; there is nothing to compare them against, and the count difference already says it. Matched repetitions are still compared field by field, so a type mismatch inside `DG1[2]` is reported normally. Malformed data is also still reported inside surplus segments &mdash; it is judged from the value alone and needs no counterpart, so an invalid date in `DG1[3]` surfaces even when `DG1[3]` only exists in one message. Everything else in those segments stays quiet, and remains visible under **Show Unflagged Fields**.
 
 **Results**
 

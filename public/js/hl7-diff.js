@@ -720,10 +720,14 @@ const HL7Diff = (function() {
       // the segment-level finding above already says it. Keep the rows so the
       // extra segment's contents can still be inspected under "Show Unflagged
       // Fields", but stop them counting as differences.
+      // Malformed data is the exception: it is judged from the value alone,
+      // needs no counterpart, and would sink a message on its own - so those
+      // rows keep their severity.
       const unmatchedSegment = !segA || !segB;
       if (unmatchedSegment) {
         const missingSide = segA ? 'B' : 'A';
         rows.forEach(function(r) {
+          if (r.kind === 'malformed') return;
           r.kind = 'unmatched';
           r.severity = 'none';
           r.side = null;
@@ -962,7 +966,9 @@ const HL7Diff = (function() {
               sideBadge +
               '<span class="compare-group-count">' +
               (group.unmatched
-                ? visibleRows.length + ' field' + (visibleRows.length === 1 ? '' : 's') + ', no counterpart to compare'
+                ? (diffCount > 0
+                    ? diffCount + ' data issue' + (diffCount === 1 ? '' : 's')
+                    : visibleRows.length + ' field' + (visibleRows.length === 1 ? '' : 's') + ', no counterpart to compare')
                 : diffCount + ' difference' + (diffCount === 1 ? '' : 's')) +
               '</span>' +
               '</div>';
