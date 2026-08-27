@@ -119,7 +119,7 @@ A field can be wrong in more than one way at once &mdash; a value can carry malf
 
 Recognition is structural, never calendar-validated: whether the digits form a real date is not checked, so `08272026` and `082620261234` compare as 8-digit and 12-digit timestamps whatever the field order. Everywhere else in a spec-defined segment a digit run is just a number, so an 8-digit account number compared against a 12-digit one reports nothing.
 
-Custom Z-segments are the exception: the spec describes no field names for them, so there is nothing to consult and timestamp detection falls back to structure. A date precision difference inside a Z-segment is therefore reported &mdash; at the cost that a Z-segment identifier of differing digit length is too.
+Custom Z-segments are the exception: the spec describes no field names for them, so there is nothing to consult and timestamp detection falls back to structure. A date precision difference inside a Z-segment is therefore reported &mdash; at the cost that a Z-segment identifier of differing digit length is too. Because that reading rests on the digit count alone, those findings say **possible date** rather than date, and add: *"This field is not described by the HL7 spec, so the date reading is assumed from the number of digits and may not be a date at all."* Findings in spec-defined date fields carry no such caveat.
 
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 

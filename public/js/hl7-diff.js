@@ -156,25 +156,30 @@ const HL7Diff = (function() {
   const DATE_NAME_PATTERN = /\b(date|time|datetime|dob)\b/i;
 
   /**
-   * Whether a field is declared to hold a date/time by the HL7 spec table.
-   * Digit strings are only read as timestamps here; everywhere else an
-   * 8- or 14-digit run is just a number, so account numbers and record IDs
-   * are not mistaken for dates.
+   * How a field's date handling is decided:
+   *   'declared' - the HL7 spec names this field as a date or time.
+   *   'assumed'  - the spec describes no such segment (a custom Z-segment), so
+   *                there is no name to consult and a timestamp-shaped digit
+   *                run is taken as a date. Reported as a possible date, since
+   *                the reading rests on the digit count alone.
+   *   null       - a spec-defined field that is not a date; digit runs here
+   *                stay numeric, so account numbers and record IDs are never
+   *                mistaken for dates.
    */
-  function isTimestampField(segmentId, fieldNum, compNum) {
+  function timestampMode(segmentId, fieldNum, compNum) {
     const segInfo = (typeof HL7_SEGMENTS !== 'undefined') ? HL7_SEGMENTS[segmentId] : null;
-    // A segment the spec does not describe at all - a custom Z-segment - has no
-    // field names to consult, so fall back to structural detection there rather
-    // than silently skipping date checks. Within a known segment an undefined
-    // field stays non-timestamp, since the spec is the authority for it.
-    if (!segInfo || !segInfo.fields) return true;
+    if (!segInfo || !segInfo.fields) return 'assumed';
     const fieldDef = segInfo.fields[fieldNum];
-    if (!fieldDef) return false;
+    if (!fieldDef) return null;
     if (compNum && fieldDef.components && fieldDef.components[compNum] &&
         DATE_NAME_PATTERN.test(fieldDef.components[compNum])) {
-      return true;
+      return 'declared';
     }
-    return DATE_NAME_PATTERN.test(fieldDef.name || '');
+    return DATE_NAME_PATTERN.test(fieldDef.name || '') ? 'declared' : null;
+  }
+
+  function isTimestampField(segmentId, fieldNum, compNum) {
+    return timestampMode(segmentId, fieldNum, compNum) !== null;
   }
 
   /** Strip occurrence and repetition indices: "PID.3[2].1" -> "PID.3.1". */
@@ -222,7 +227,7 @@ const HL7Diff = (function() {
    *   cls  - broad class used for high-severity type mismatches
    *   type - narrow type used for lower-severity format/precision notes
    */
-  function signature(value, allowTimestamp) {
+  function signature(value, tsMode) {
     const v = value;
     if (!v) return { cls: 'empty', type: 'empty', length: 0, caseClass: 'none', label: 'empty' };
 
@@ -233,15 +238,18 @@ const HL7Diff = (function() {
     // Matched by structure, not by calendar validity - whether the digits form
     // a real date is not this tool's business. Only attempted for fields the
     // spec declares as date/time, so numeric identifiers stay numeric.
-    const tsMatch = allowTimestamp
+    const tsMatch = tsMode
       ? v.match(/^(\d{8})(\d{2}(?:\d{2}(?:\d{2})?)?)?(\.\d{1,4})?([+-]\d{4})?$/)
       : null;
     if (tsMatch) {
+      const assumed = tsMode === 'assumed';
       if (tsMatch[2] || tsMatch[3] || tsMatch[4]) {
         const precision = 8 + (tsMatch[2] ? tsMatch[2].length : 0);
-        return { cls: 'numeric', type: 'datetime', length: len, precision: precision, caseClass: cc, label: 'date/time' };
+        return { cls: 'numeric', type: 'datetime', length: len, precision: precision,
+                 caseClass: cc, label: 'date/time', assumed: assumed };
       }
-      return { cls: 'numeric', type: 'date', length: len, precision: 8, caseClass: cc, label: 'date' };
+      return { cls: 'numeric', type: 'date', length: len, precision: 8,
+               caseClass: cc, label: 'date', assumed: assumed };
     }
 
     if (/^-?\d+$/.test(v)) return { cls: 'numeric', type: 'numeric', length: len, caseClass: cc, label: 'numeric' };
@@ -252,9 +260,23 @@ const HL7Diff = (function() {
     return { cls: 'text', type: 'symbolic', length: len, caseClass: cc, label: 'text with symbols' };
   }
 
+  function isTimestampSig(sig) {
+    return !!sig && (sig.type === 'date' || sig.type === 'datetime');
+  }
+
   function describeSignature(sig) {
     if (sig.cls === 'empty') return 'empty';
-    return sig.label + '(' + sig.length + ')';
+    const label = (sig.assumed && isTimestampSig(sig)) ? 'possible ' + sig.label : sig.label;
+    return label + '(' + sig.length + ')';
+  }
+
+  /** Caveat appended when a date reading rests on the digit count alone. */
+  function assumedDateNote(sigA, sigB) {
+    const assumed = (sigA && sigA.assumed && isTimestampSig(sigA)) ||
+                    (sigB && sigB.assumed && isTimestampSig(sigB));
+    if (!assumed) return '';
+    return ' This field is not described by the HL7 spec, so the date reading is ' +
+           'assumed from the number of digits and may not be a date at all.';
   }
 
   // ========================================
@@ -442,7 +464,7 @@ const HL7Diff = (function() {
         const leaf = profile.leaves[key];
         if (value) {
           leaf.populated++;
-          leaf.classes[signature(value, isTimestampField(seg.segmentId, f, c)).cls] = true;
+          leaf.classes[signature(value, timestampMode(seg.segmentId, f, c)).cls] = true;
           // Keep the distinct values so the results can show what a finding
           // was actually measured against.
           if (leaf.values.indexOf(value) === -1 && leaf.values.length < 12) {
@@ -515,7 +537,7 @@ const HL7Diff = (function() {
           detail: 'Populated here, but empty in all ' + others + '.'
         });
       } else {
-        const sig = signature(value, isTimestampField(segId, f, c));
+        const sig = signature(value, timestampMode(segId, f, c));
         const cls = sig.cls;
         if (!entry.classes[cls]) {
           verdicts.push({
@@ -523,7 +545,7 @@ const HL7Diff = (function() {
             severity: 'high',
             detail: 'This value is ' + describeSignature(sig) +
                     ', but the ' + others + (profile.total === 1 ? ' uses ' : ' use ') +
-                    classListOf(entry) + ' here.'
+                    classListOf(entry) + ' here.' + assumedDateNote(sig, null)
           });
         } else if (verdicts.length === 0) {
           verdicts.push({
@@ -567,7 +589,7 @@ const HL7Diff = (function() {
    * (precision, case, padding) just describe the same difference again.
    */
   function classifyLeaf(addr, rawA, rawB, ctx, segmentId, fieldNum, compNum) {
-    const allowTimestamp = isTimestampField(segmentId, fieldNum, compNum);
+    const tsMode = timestampMode(segmentId, fieldNum, compNum);
     const a = rawA == null ? '' : rawA;
     const b = rawB == null ? '' : rawB;
     const verdicts = [];
@@ -620,13 +642,14 @@ const HL7Diff = (function() {
       return verdicts;
     }
 
-    const sigA = signature(aT, allowTimestamp);
-    const sigB = signature(bT, allowTimestamp);
+    const sigA = signature(aT, tsMode);
+    const sigB = signature(bT, tsMode);
 
     if (sigA.cls !== sigB.cls) {
       verdicts.push({
         kind: 'shape', severity: 'high', sigA: sigA, sigB: sigB,
-        detail: 'Message A is ' + describeSignature(sigA) + ', Message B is ' + describeSignature(sigB) + '.'
+        detail: 'Message A is ' + describeSignature(sigA) + ', Message B is ' +
+                describeSignature(sigB) + '.' + assumedDateNote(sigA, sigB)
       });
       return verdicts;
     }
@@ -639,7 +662,8 @@ const HL7Diff = (function() {
         kind: 'precision', severity: 'medium', sigA: sigA, sigB: sigB,
         detail: 'Date/time precision differs: Message A carries ' + sigA.precision +
                 ' digits (' + describeSignature(sigA) + '), Message B carries ' +
-                sigB.precision + ' digits (' + describeSignature(sigB) + ').'
+                sigB.precision + ' digits (' + describeSignature(sigB) + ').' +
+                assumedDateNote(sigA, sigB)
       });
       return verdicts;
     }
@@ -647,7 +671,8 @@ const HL7Diff = (function() {
     if (sigA.type !== sigB.type) {
       verdicts.push({
         kind: 'format', severity: 'low', sigA: sigA, sigB: sigB,
-        detail: 'Same broad type but different format: ' + describeSignature(sigA) + ' vs ' + describeSignature(sigB) + '.'
+        detail: 'Same broad type but different format: ' + describeSignature(sigA) + ' vs ' +
+                describeSignature(sigB) + '.' + assumedDateNote(sigA, sigB)
       });
       return verdicts;
     }
@@ -1343,6 +1368,7 @@ const HL7Diff = (function() {
     parseMessages: parseMessages,
     signature: signature,
     isTimestampField: isTimestampField,
+    timestampMode: timestampMode,
     handleGroupToggle: handleGroupToggle,
     setAllGroups: setAllGroups,
     getCollapsedGroups: getCollapsedGroups
