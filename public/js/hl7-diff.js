@@ -163,7 +163,11 @@ const HL7Diff = (function() {
    */
   function isTimestampField(segmentId, fieldNum, compNum) {
     const segInfo = (typeof HL7_SEGMENTS !== 'undefined') ? HL7_SEGMENTS[segmentId] : null;
-    if (!segInfo || !segInfo.fields) return false;
+    // A segment the spec does not describe at all - a custom Z-segment - has no
+    // field names to consult, so fall back to structural detection there rather
+    // than silently skipping date checks. Within a known segment an undefined
+    // field stays non-timestamp, since the spec is the authority for it.
+    if (!segInfo || !segInfo.fields) return true;
     const fieldDef = segInfo.fields[fieldNum];
     if (!fieldDef) return false;
     if (compNum && fieldDef.components && fieldDef.components[compNum] &&

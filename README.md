@@ -117,7 +117,9 @@ A field can be wrong in more than one way at once &mdash; a value can carry malf
 
 **Dates.** Digit strings are read as dates only in fields the HL7 spec table declares as date/time &mdash; `PID.7` (Date/Time of Birth), `PV1.44` (Admit Date/Time), `DG1.5` (Diagnosis Date/Time), and so on. In those fields a value matching the HL7 timestamp shape (8, 10, 12, or 14 digits, with optional fractional seconds and UTC offset) is a timestamp, and a difference in how many digits each side carries is reported as a precision change.
 
-Recognition is structural, never calendar-validated: whether the digits form a real date is not checked, so `08272026` and `082620261234` compare as 8-digit and 12-digit timestamps whatever the field order. Everywhere else a digit run is just a number, so an 8-digit account number compared against a 12-digit one reports nothing. Custom Z-segments have no spec entry, so their fields are never treated as timestamps.
+Recognition is structural, never calendar-validated: whether the digits form a real date is not checked, so `08272026` and `082620261234` compare as 8-digit and 12-digit timestamps whatever the field order. Everywhere else in a spec-defined segment a digit run is just a number, so an 8-digit account number compared against a 12-digit one reports nothing.
+
+Custom Z-segments are the exception: the spec describes no field names for them, so there is nothing to consult and timestamp detection falls back to structure. A date precision difference inside a Z-segment is therefore reported &mdash; at the cost that a Z-segment identifier of differing digit length is too.
 
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 
