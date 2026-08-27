@@ -383,6 +383,132 @@ const HL7Diff = (function() {
   }
 
   // ========================================
+  // SEGMENT SHAPE PROFILES
+  // ========================================
+  //
+  // A surplus repetition (message B has four DG1s, A has two) has no
+  // counterpart to compare against field by field. It can still be checked
+  // against the shape the OTHER message's segments of that type establish:
+  // every DG1 in A tells us what a DG1 is supposed to look like.
+
+  /** Stable key for a leaf inside a segment, independent of how deep the data goes. */
+  function leafKey(fieldNum, compNum, subNum) {
+    return fieldNum + '.' + (compNum || 1) + '.' + (subNum || 1);
+  }
+
+  /**
+   * Walk every leaf of a segment at a fixed field/component/subcomponent
+   * depth so the same address means the same thing across segments.
+   */
+  function walkSegmentLeaves(msg, segment, cb) {
+    const maxF = maxFieldNumber(segment);
+    for (let f = 1; f <= maxF; f++) {
+      const raw = getRawField(msg, segment, f);
+      // Repetitions are data volume, not shape - profile the first only.
+      const rep = (raw ? raw.split(msg.repetitionSeparator)[0] : '') || '';
+      const comps = rep.split(msg.componentSeparator);
+      for (let c = 0; c < comps.length; c++) {
+        const subs = (comps[c] || '').split(msg.subcomponentSeparator);
+        for (let s = 0; s < subs.length; s++) {
+          cb(leafKey(f, c + 1, s + 1), (subs[s] || '').trim(), f, c + 1, s + 1);
+        }
+      }
+    }
+  }
+
+  /**
+   * Summarize how a set of same-type segments populate and shape each leaf.
+   */
+  function buildSegmentProfile(msg, segments) {
+    const profile = { total: segments.length, leaves: {} };
+    segments.forEach(function(seg) {
+      walkSegmentLeaves(msg, seg, function(key, value) {
+        if (!profile.leaves[key]) profile.leaves[key] = { populated: 0, classes: {} };
+        if (value) {
+          profile.leaves[key].populated++;
+          profile.leaves[key].classes[signature(value).cls] = true;
+        }
+      });
+    });
+    return profile;
+  }
+
+  function classListOf(entry) {
+    return Object.keys(entry.classes).join(' or ');
+  }
+
+  /**
+   * Compare a segment that has no counterpart against the profile its
+   * same-type siblings establish in the other message.
+   */
+  function compareSegmentToProfile(ctx, segment, profile, pair, ownSide, otherSide, rows) {
+    const msg = ownSide === 'A' ? ctx.msgA : ctx.msgB;
+    const segId = pair.segmentId;
+    const plural = profile.total === 1 ? '' : 's';
+    const others = profile.total + ' ' + segId + ' segment' + plural + ' in Message ' + otherSide;
+
+    walkSegmentLeaves(msg, segment, function(key, value, f, c, s) {
+      const addr = segId + '[' + pair.occurrence + '].' + f +
+                   (c > 1 || s > 1 ? '.' + c : '') + (s > 1 ? '.' + s : '');
+      const entry = profile.leaves[key];
+      const valA = ownSide === 'A' ? value : '';
+      const valB = ownSide === 'A' ? '' : value;
+
+      function push(verdict) {
+        addRow(rows, addr, segId, pair.occurrence, f, c > 1 || s > 1 ? c : null, s > 1 ? s : null,
+               valA, valB, verdict);
+      }
+
+      // Malformed data is judged from the value alone.
+      const issues = valueIssues(value, msg);
+      if (issues.length) {
+        push({
+          kind: 'malformed',
+          severity: 'high',
+          detail: 'Message ' + ownSide + ' ' + issues.join('; ') + '.'
+        });
+        return;
+      }
+
+      if (!value) {
+        // Empty here, but every sibling in the other message populates it.
+        if (entry && entry.populated === profile.total && profile.total > 0) {
+          push({
+            kind: 'profile-missing',
+            severity: 'medium',
+            detail: 'Empty here, but populated in all ' + others + '.'
+          });
+        }
+        return;
+      }
+
+      // Populated here, but never populated in any sibling.
+      if (!entry || entry.populated === 0) {
+        push({
+          kind: 'profile-extra',
+          severity: 'medium',
+          detail: 'Populated here, but empty in all ' + others + '.'
+        });
+        return;
+      }
+
+      // Populated on both sides - does the type match what siblings use?
+      const cls = signature(value).cls;
+      if (!entry.classes[cls]) {
+        push({
+          kind: 'shape',
+          severity: 'high',
+          detail: 'This value is ' + describeSignature(signature(value)) +
+                  ', but the ' + others + ' use ' + classListOf(entry) + ' here.'
+        });
+        return;
+      }
+
+      push({ kind: 'unmatched', severity: 'none', detail: 'Consistent with the ' + others + '.' });
+    });
+  }
+
+  // ========================================
   // COMPARISON
   // ========================================
 
@@ -679,11 +805,51 @@ const HL7Diff = (function() {
       }
     });
 
+    // Same-type segments in each message, used to profile surplus repetitions.
+    const byIdA = groupById(msgA);
+    const byIdB = groupById(msgB);
+    const profileCache = {};
+
+    function profileFor(side, segmentId) {
+      const cacheKey = side + ':' + segmentId;
+      if (!(cacheKey in profileCache)) {
+        const msg = side === 'A' ? msgA : msgB;
+        const segs = (side === 'A' ? byIdA : byIdB)[segmentId] || [];
+        profileCache[cacheKey] = segs.length ? buildSegmentProfile(msg, segs) : null;
+      }
+      return profileCache[cacheKey];
+    }
+
     // Field-level comparison, segment pair by segment pair.
     pairs.forEach(function(pair) {
       const rows = [];
       const segA = pair.a;
       const segB = pair.b;
+
+      // A surplus repetition of a segment type the other message also carries:
+      // compare it against the shape those siblings establish rather than
+      // against an absent counterpart.
+      if (!segA !== !segB) {
+        const ownSide = segA ? 'A' : 'B';
+        const otherSide = segA ? 'B' : 'A';
+        const profile = profileFor(otherSide, pair.segmentId);
+        if (profile && profile.total > 0) {
+          compareSegmentToProfile(ctx, segA || segB, profile, pair, ownSide, otherSide, rows);
+          groups.push({
+            segmentId: pair.segmentId,
+            occurrence: pair.occurrence,
+            label: segmentLabel(pair.segmentId),
+            presentA: !!segA,
+            presentB: !!segB,
+            unmatched: true,
+            profiled: true,
+            profileTotal: profile.total,
+            otherSide: otherSide,
+            rows: rows
+          });
+          return;
+        }
+      }
 
       const maxA = segA ? maxFieldNumber(segA) : 0;
       const maxB = segB ? maxFieldNumber(segB) : 0;
@@ -853,6 +1019,8 @@ const HL7Diff = (function() {
     identical: 'Identical',
     sameshape: 'Same shape',
     unmatched: 'No counterpart',
+    'profile-extra': 'Extra field',
+    'profile-missing': 'Missing field',
     'segment-presence': 'Segment missing',
     'segment-count': 'Segment count',
     truncation: 'Truncated segment',
@@ -959,13 +1127,19 @@ const HL7Diff = (function() {
       if (!group.presentA) sideBadge = '<span class="compare-side-badge b-only">Message B only</span>';
       else if (!group.presentB) sideBadge = '<span class="compare-side-badge a-only">Message A only</span>';
 
+      if (group.profiled) {
+        sideBadge += '<span class="compare-group-note">checked against the ' + group.profileTotal + ' ' +
+                     escapeHtml(group.segmentId) + ' segment' + (group.profileTotal === 1 ? '' : 's') +
+                     ' in Message ' + group.otherSide + '</span>';
+      }
+
       html += '<section class="compare-group">';
       html += '<div class="compare-group-header">' +
               '<span class="compare-group-id">' + escapeHtml(group.segmentId) + '[' + group.occurrence + ']</span>' +
               '<span class="compare-group-name">' + escapeHtml(group.label) + '</span>' +
               sideBadge +
               '<span class="compare-group-count">' +
-              (group.unmatched
+              (group.unmatched && !group.profiled
                 ? (diffCount > 0
                     ? diffCount + ' data issue' + (diffCount === 1 ? '' : 's')
                     : visibleRows.length + ' field' + (visibleRows.length === 1 ? '' : 's') + ', no counterpart to compare')

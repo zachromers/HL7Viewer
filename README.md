@@ -115,7 +115,16 @@ What *is* reported:
 
 Message-level differences are listed above the field detail: segments present in only one message (including custom Z-segments), segment count mismatches, mismatched delimiters, and segments truncated relative to their counterpart.
 
-**Repeated segments.** When one message carries more repetitions of a segment than the other (say two `DG1` segments versus four), the mismatch is reported once as a segment count difference. The fields inside the surplus segments are *not* each reported as missing &mdash; there is nothing to compare them against, and the count difference already says it. Matched repetitions are still compared field by field, so a type mismatch inside `DG1[2]` is reported normally. Malformed data is also still reported inside surplus segments &mdash; it is judged from the value alone and needs no counterpart, so an invalid date in `DG1[3]` surfaces even when `DG1[3]` only exists in one message. Everything else in those segments stays quiet, and remains visible under **Show Unflagged Fields**.
+**Repeated segments.** When one message carries more repetitions of a segment than the other (say two `DG1` segments versus four), the mismatch is reported once as a segment count difference, not once per field of every surplus segment.
+
+The surplus segments are still checked. Having no counterpart of their own, they are compared against the shape the *other* message's segments of that type establish &mdash; every `DG1` in Message A shows what a `DG1` is supposed to look like. Within a surplus segment this reports:
+
+- a field whose value type does not match what the other message's segments of that type use (High)
+- a field left empty that every one of them populates (Medium)
+- a field populated that none of them populate (Medium)
+- malformed data, which is judged from the value alone (High)
+
+A surplus segment that looks like its siblings reports nothing beyond the count difference. This applies only when the other message has at least one segment of that type; a segment type absent entirely is covered by the segment-missing finding instead. Matched repetitions are compared field by field as normal.
 
 **Results**
 
