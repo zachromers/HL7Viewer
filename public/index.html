@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="css/main.css">
   <link rel="stylesheet" href="css/viewer.css">
   <link rel="stylesheet" href="css/compare.css">
+  <link rel="stylesheet" href="css/lineend.css">
 </head>
 <body>
   <div class="app-container">
@@ -29,6 +30,10 @@
             <label class="toggle-option">
               <input type="radio" name="pageMode" value="compare">
               <span class="toggle-btn">Compare</span>
+            </label>
+            <label class="toggle-option">
+              <input type="radio" name="pageMode" value="lineend">
+              <span class="toggle-btn">Line End Utility</span>
             </label>
           </div>
         </div>
@@ -261,6 +266,87 @@
           </div>
         </div>
       </div>
+
+      <!-- Line End Utility Panel -->
+      <div class="lineend-panel" id="lineEndPanel">
+        <div class="lineend-intro">
+          <h2>Line End Utility</h2>
+          <p>Choose the terminator for every segment in a file, then download the result with
+             exact bytes. Each segment keeps its own ending. To change how a message ends,
+             either append an end-of-message ending <strong>on top of</strong> the last
+             segment's ending, which adds a line, or <strong>replace</strong> the last
+             segment's own ending, which does not.</p>
+          <p class="lineend-caveat">For accurate detection, load your file with
+             <strong>Browse File</strong> or drag-and-drop. Browsers normalize CR to LF when text
+             is pasted into a box, so pasted input always reports LF no matter what the original
+             file contained.</p>
+        </div>
+
+        <div class="lineend-input" id="lineEndInputPane">
+          <div class="lineend-input-header">
+            <span class="lineend-input-title">Source</span>
+            <span class="lineend-status" id="lineEndStatus"></span>
+          </div>
+          <textarea class="lineend-textarea" id="lineEndInput"
+                    placeholder="Paste HL7 content here, or drop a file onto this pane..."
+                    spellcheck="false"></textarea>
+          <div class="lineend-input-actions">
+            <label class="lineend-file-label">
+              <input type="file" class="lineend-file-input" id="lineEndFile">
+              <span class="lineend-browse-btn">Browse File</span>
+            </label>
+            <button type="button" id="lineEndLoadBtn" class="lineend-load-btn">Load</button>
+            <button type="button" id="lineEndClearInputBtn" class="lineend-clear-btn">Clear</button>
+          </div>
+        </div>
+
+        <div class="lineend-banner" id="lineEndBanner" hidden>
+          <span class="lineend-banner-text" id="lineEndBannerText"></span>
+          <button type="button" id="lineEndNormalizeBtn" class="lineend-banner-btn">Normalize all</button>
+        </div>
+
+        <div class="lineend-toolbar" id="lineEndToolbar" hidden>
+          <div class="lineend-bulk">
+            <label for="lineEndBulkSegment">All segment endings:</label>
+            <select id="lineEndBulkSegment" class="select-control">
+              <option value="">Choose&hellip;</option>
+              <option value="CR">CR</option>
+              <option value="LF">LF</option>
+              <option value="CRLF">CRLF</option>
+            </select>
+            <button type="button" id="lineEndApplySegmentBtn" class="lineend-apply-btn">Apply to all segments</button>
+          </div>
+          <div class="lineend-bulk">
+            <label for="lineEndBulkMessage">End-of-message ending:</label>
+            <select id="lineEndBulkMessage" class="select-control">
+              <option value="NONE">None</option>
+              <option value="CR">CR</option>
+              <option value="LF">LF</option>
+              <option value="CRLF">CRLF</option>
+            </select>
+            <button type="button" id="lineEndApplyMessageBtn" class="lineend-apply-btn">Apply to all messages</button>
+          </div>
+          <div class="lineend-bulk">
+            <label for="lineEndBulkLastSegment">Last segment of each message:</label>
+            <select id="lineEndBulkLastSegment" class="select-control">
+              <option value="">Choose&hellip;</option>
+              <option value="CR">CR</option>
+              <option value="LF">LF</option>
+              <option value="CRLF">CRLF</option>
+            </select>
+            <button type="button" id="lineEndApplyLastSegmentBtn" class="lineend-apply-btn">Replace on all messages</button>
+          </div>
+          <span class="lineend-summary" id="lineEndSummary"></span>
+          <button type="button" id="lineEndDownloadBtn" class="lineend-download-btn">Download Converted File</button>
+        </div>
+
+        <div class="lineend-rows" id="lineEndRows">
+          <div class="lineend-no-content">
+            <p>Paste or drop an HL7 file above to choose its line endings.</p>
+            <p class="lineend-hint">Nothing is uploaded — everything runs in this browser tab.</p>
+          </div>
+        </div>
+      </div>
     </main>
     <footer class="app-footer">
       <p class="footer-disclaimer">This application is for entertainment purposes only. There is no guarantee of accuracy or website security. Don't sue me pretty please.</p>
@@ -326,6 +412,7 @@
   <script src="js/hl7-parser.js"></script>
   <script src="js/stats.js"></script>
   <script src="js/hl7-diff.js"></script>
+  <script src="js/hl7-lineend.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

@@ -46,6 +46,28 @@
   const compareResults = document.getElementById('compareResults');
   const compareShowUnflagged = document.getElementById('compareShowUnflagged');
 
+  // DOM Elements - Line End Utility
+  const lineEndPanel = document.getElementById('lineEndPanel');
+  const lineEndInputPane = document.getElementById('lineEndInputPane');
+  const lineEndInput = document.getElementById('lineEndInput');
+  const lineEndStatus = document.getElementById('lineEndStatus');
+  const lineEndFile = document.getElementById('lineEndFile');
+  const lineEndLoadBtn = document.getElementById('lineEndLoadBtn');
+  const lineEndClearInputBtn = document.getElementById('lineEndClearInputBtn');
+  const lineEndBanner = document.getElementById('lineEndBanner');
+  const lineEndBannerText = document.getElementById('lineEndBannerText');
+  const lineEndNormalizeBtn = document.getElementById('lineEndNormalizeBtn');
+  const lineEndToolbar = document.getElementById('lineEndToolbar');
+  const lineEndBulkSegment = document.getElementById('lineEndBulkSegment');
+  const lineEndApplySegmentBtn = document.getElementById('lineEndApplySegmentBtn');
+  const lineEndBulkMessage = document.getElementById('lineEndBulkMessage');
+  const lineEndApplyMessageBtn = document.getElementById('lineEndApplyMessageBtn');
+  const lineEndBulkLastSegment = document.getElementById('lineEndBulkLastSegment');
+  const lineEndApplyLastSegmentBtn = document.getElementById('lineEndApplyLastSegmentBtn');
+  const lineEndSummary = document.getElementById('lineEndSummary');
+  const lineEndDownloadBtn = document.getElementById('lineEndDownloadBtn');
+  const lineEndRows = document.getElementById('lineEndRows');
+
   // DOM Elements - Statistics
   const statsPanel = document.getElementById('statsPanel');
   const statsNoDataMessage = document.getElementById('statsNoDataMessage');
@@ -65,6 +87,19 @@
   // Current content state
   let currentContent = null;
   let currentPageMode = 'viewer';
+
+  // Line End Utility state. lineEndSourceText is the authoritative copy of the
+  // loaded bytes: a <textarea> normalizes CR and CRLF to LF, so reading the
+  // input box back after a file load would silently rewrite every terminator.
+  let lineEndModel = null;
+  let lineEndSourceText = null;
+  let lineEndSourceName = null;
+  let lineEndRendered = 0;
+  // Set while the last-segment replacement is the reason the file holds more
+  // than one kind of terminator, so the mixed-endings banner can say the mix
+  // was asked for instead of reporting it as a defect.
+  let lineEndMixIsIntended = false;
+  const LINEEND_BATCH = 10;
 
   // ========================================
   // SETTINGS MANAGEMENT
@@ -119,11 +154,13 @@
 
     const isViewer = mode === 'viewer';
     const isCompare = mode === 'compare';
+    const isLineEnd = mode === 'lineend';
 
     // Panels
     viewerArea.style.display = isViewer ? 'block' : 'none';
     statsPanel.classList.toggle('active', mode === 'statistics');
     comparePanel.classList.toggle('active', isCompare);
+    lineEndPanel.classList.toggle('active', isLineEnd);
 
     // Input area belongs to the viewer only, and only while nothing is loaded.
     if (isViewer && !currentContent) {
@@ -307,6 +344,13 @@
     // On the Compare page, Clear applies to the comparison, not the viewer.
     if (currentPageMode === 'compare') {
       clearComparison();
+      return;
+    }
+
+    // Same for the Line End page: Clear resets that page and leaves whatever
+    // the Viewer has loaded alone.
+    if (currentPageMode === 'lineend') {
+      clearLineEnd();
       return;
     }
 
@@ -944,6 +988,394 @@
     HL7Diff.handleGroupToggle(e);
   });
 
+  // ========================================
+  // LINE END HANDLERS
+  // ========================================
+
+  const LINEEND_PLACEHOLDER = `
+    <div class="lineend-no-content">
+      <p>Paste or drop an HL7 file above to choose its line endings.</p>
+      <p class="lineend-hint">Nothing is uploaded &mdash; everything runs in this browser tab.</p>
+    </div>
+  `;
+
+  function setLineEndStatus(text, isError) {
+    lineEndStatus.textContent = text || '';
+    lineEndStatus.classList.toggle('error', isError === true);
+  }
+
+  /**
+   * Drop everything the page is showing and go back to the empty state. Used
+   * both by Clear and by every failed load, so the rows on screen always match
+   * what is actually in the model.
+   */
+  function resetLineEndOutput() {
+    lineEndModel = null;
+    lineEndRendered = 0;
+    lineEndMixIsIntended = false;
+    lineEndRows.innerHTML = LINEEND_PLACEHOLDER;
+    lineEndToolbar.hidden = true;
+    lineEndToolbar.classList.remove('stale');
+    lineEndBanner.hidden = true;
+  }
+
+  function clearLineEnd() {
+    lineEndInput.value = '';
+    lineEndFile.value = '';
+    lineEndSourceText = null;
+    lineEndSourceName = null;
+    lineEndBulkSegment.value = '';
+    lineEndBulkMessage.value = 'NONE';
+    lineEndBulkLastSegment.value = '';
+    setLineEndStatus('');
+    resetLineEndOutput();
+  }
+
+  /**
+   * Validate, parse and render. Errors are reported inline next to the input
+   * rather than through alert(), following the Compare page.
+   *
+   * @param {string} rawText the exact bytes to convert
+   * @param {'file'|'paste'} sourceKind
+   * @param {string|null} fileName used for the download filename
+   */
+  function loadLineEndContent(rawText, sourceKind, fileName) {
+    if (!rawText || !rawText.trim()) {
+      resetLineEndOutput();
+      setLineEndStatus('Nothing to convert.');
+      return;
+    }
+
+    if (!HL7Parser.isHL7Content(rawText)) {
+      resetLineEndOutput();
+      setLineEndStatus('Not recognized as HL7 content. This page only converts HL7 files.', true);
+      return;
+    }
+
+    let model;
+    try {
+      model = HL7LineEnd.buildModel(rawText, sourceKind);
+    } catch (error) {
+      resetLineEndOutput();
+      setLineEndStatus('Could not parse this content: ' + error.message, true);
+      return;
+    }
+
+    // isHL7Content only checks the first three characters of each line against
+    // the segment dictionary, with no field-separator check, so prose like
+    // "PIDGEON" can pass it while yielding no usable segment at all.
+    if (model.segmentCount === 0) {
+      resetLineEndOutput();
+      setLineEndStatus('Not recognized as HL7 content. This page only converts HL7 files.', true);
+      return;
+    }
+
+    lineEndModel = model;
+    lineEndSourceText = rawText;
+    lineEndSourceName = fileName || null;
+    lineEndRendered = 0;
+    lineEndMixIsIntended = false;
+    lineEndRows.innerHTML = '';
+    lineEndToolbar.hidden = false;
+    lineEndToolbar.classList.remove('stale');
+
+    renderLineEndBatch();
+    refreshLineEndSummary();
+
+    const loaded = 'Loaded ' + model.rowCount.toLocaleString() + ' line'
+      + (model.rowCount === 1 ? '' : 's') + (fileName ? ' from ' + fileName : '') + '.';
+    if (sourceKind === 'paste') {
+      setLineEndStatus(loaded + ' Pasted text always reports LF — use Browse File for exact detection.');
+    } else {
+      setLineEndStatus(loaded);
+    }
+  }
+
+  /**
+   * Append the next batch of message blocks. Only DOM construction is batched;
+   * the whole file is already parsed, which is how the other pages work too.
+   */
+  function renderLineEndBatch() {
+    if (!lineEndModel) return;
+
+    const existingBtn = lineEndRows.querySelector('.hl7-load-more');
+    if (existingBtn) existingBtn.remove();
+
+    lineEndRendered = HL7LineEnd.renderMessages(
+      lineEndRows, lineEndModel, lineEndRendered, LINEEND_BATCH
+    );
+
+    const total = lineEndModel.messages.length;
+    if (lineEndRendered < total) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'hl7-load-more';
+      btn.innerHTML = 'Load More <span class="hl7-load-more-count">(showing '
+        + lineEndRendered.toLocaleString() + ' of ' + total.toLocaleString()
+        + ' messages)</span>';
+      btn.addEventListener('click', renderLineEndBatch);
+      lineEndRows.appendChild(btn);
+    }
+  }
+
+  /**
+   * Recompute the terminator tally and update the summary line and banner.
+   * Never re-renders rows — a single dropdown change must not rebuild the DOM.
+   */
+  function refreshLineEndSummary() {
+    if (!lineEndModel) {
+      lineEndBanner.hidden = true;
+      lineEndSummary.textContent = '';
+      return;
+    }
+
+    const analysis = HL7LineEnd.analyzeEndings(lineEndModel);
+    lineEndModel.analysis = analysis;
+
+    const breakdown = HL7LineEnd.ENDING_TOKENS
+      .filter(function(token) { return analysis.counts[token] > 0; })
+      .map(function(token) { return token + ' ×' + analysis.counts[token].toLocaleString(); });
+    if (analysis.noTrailing) breakdown.push('no trailing terminator');
+
+    lineEndSummary.textContent = lineEndModel.messageCount.toLocaleString() + ' message'
+      + (lineEndModel.messageCount === 1 ? '' : 's') + ' · '
+      + lineEndModel.segmentCount.toLocaleString() + ' segment'
+      + (lineEndModel.segmentCount === 1 ? '' : 's')
+      + (breakdown.length ? ' · ' + breakdown.join(', ') : '');
+
+    // A file with segments but no MSH is still worth converting — only the
+    // end-of-message setting is inapplicable — so this is a warning, not the
+    // hard error the Compare page raises for the same case.
+    const noMsh = lineEndModel.messageCount === 0;
+    const parts = [];
+    if (noMsh) {
+      parts.push('No MSH segment found — treating the whole file as one block. '
+        + 'The end-of-message setting will not be applied.');
+    }
+    if (analysis.mixed) {
+      parts.push(lineEndMixIsIntended
+        ? 'Mixed line endings: ' + breakdown.join(', ')
+          + ' — expected, since the last segment of each message was given its own ending.'
+        : 'Mixed line endings detected: ' + breakdown.join(', ') + '.');
+    }
+
+    if (!parts.length) {
+      lineEndBanner.hidden = true;
+      return;
+    }
+
+    lineEndBanner.hidden = false;
+    lineEndBanner.classList.toggle('warn', noMsh);
+    lineEndBannerText.textContent = parts.join(' ');
+    lineEndNormalizeBtn.hidden = !analysis.mixed;
+    if (analysis.mixed) {
+      lineEndNormalizeBtn.textContent = 'Normalize all to ' + analysis.majority;
+    }
+  }
+
+  /**
+   * Push a bulk value onto the <select> elements that are currently mounted.
+   * The model has already been updated for every message; blocks rendered
+   * later read their value from it, so they pick the change up on arrival.
+   */
+  function syncMountedSelects(selector, token) {
+    const selects = lineEndRows.querySelectorAll(selector);
+    for (let i = 0; i < selects.length; i++) {
+      selects[i].value = token;
+    }
+  }
+
+  /**
+   * Same idea as syncMountedSelects, for an operation that touches one row per
+   * message instead of every row. Targets in blocks not yet rendered have no
+   * <select> to find, and read the model when they arrive.
+   */
+  function syncMountedRowSelects(targets, token) {
+    for (let i = 0; i < targets.length; i++) {
+      const select = lineEndRows.querySelector('select.lineend-row-select[data-msg="'
+        + targets[i].message + '"][data-row="' + targets[i].row + '"]');
+      if (select) select.value = token;
+    }
+  }
+
+  function applyLineEndRowBulk(token) {
+    const changed = HL7LineEnd.applyAllRowEndings(lineEndModel, token);
+    lineEndMixIsIntended = false;
+    syncMountedSelects('select.lineend-row-select', token);
+    refreshLineEndSummary();
+    setLineEndStatus('Set all ' + lineEndModel.rowCount.toLocaleString() + ' line'
+      + (lineEndModel.rowCount === 1 ? '' : 's') + ' to ' + token
+      + ' (' + changed.toLocaleString() + ' changed).');
+  }
+
+  /** Keep the original extension so a .txt holding HL7 stays a .txt. */
+  function lineEndFilename() {
+    if (lineEndSourceName) {
+      const dot = lineEndSourceName.lastIndexOf('.');
+      const base = dot > 0 ? lineEndSourceName.slice(0, dot) : lineEndSourceName;
+      const ext = dot > 0 ? lineEndSourceName.slice(dot) : '.hl7';
+      return base + '_lineends' + ext;
+    }
+    return 'line_endings_' + new Date().toISOString().slice(0, 10) + '.hl7';
+  }
+
+  function loadLineEndFile(file) {
+    if (!file) return;
+    readFile(file)
+      .then(function(content) {
+        // The textarea is display only from here on. Its .value normalizes CR
+        // to LF, so the parse is handed `content`, never the box.
+        lineEndInput.value = content;
+        loadLineEndContent(content, 'file', file.name);
+      })
+      .catch(function(error) {
+        setLineEndStatus('Error reading file: ' + error.message, true);
+      });
+  }
+
+  function setUpLineEndDrop() {
+    lineEndInputPane.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      lineEndInputPane.classList.add('drag-over');
+    });
+    lineEndInputPane.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!lineEndInputPane.contains(e.relatedTarget)) {
+        lineEndInputPane.classList.remove('drag-over');
+      }
+    });
+    lineEndInputPane.addEventListener('drop', function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      lineEndInputPane.classList.remove('drag-over');
+      const files = e.dataTransfer.files;
+      if (files && files.length > 0) {
+        loadLineEndFile(files[0]);
+      }
+    });
+  }
+
+  lineEndFile.addEventListener('change', function() {
+    loadLineEndFile(this.files[0]);
+  });
+
+  lineEndLoadBtn.addEventListener('click', function() {
+    lineEndSourceName = null;
+    loadLineEndContent(lineEndInput.value, 'paste', null);
+  });
+
+  // Auto-load on paste, matching the viewer's input area.
+  lineEndInput.addEventListener('paste', function() {
+    setTimeout(function() {
+      lineEndSourceName = null;
+      loadLineEndContent(lineEndInput.value, 'paste', null);
+    }, 0);
+  });
+
+  // Deliberately not a reparse: retokenizing a multi-megabyte paste on every
+  // keystroke would lock the tab. Mark the results stale instead.
+  lineEndInput.addEventListener('input', function() {
+    if (!lineEndModel) return;
+    lineEndToolbar.classList.add('stale');
+    setLineEndStatus('Input changed — click Load to reparse.');
+  });
+
+  lineEndClearInputBtn.addEventListener('click', clearLineEnd);
+
+  lineEndApplySegmentBtn.addEventListener('click', function() {
+    if (!lineEndModel) return;
+    const token = lineEndBulkSegment.value;
+    if (!token) {
+      setLineEndStatus('Choose CR, LF, or CRLF first.', true);
+      return;
+    }
+    applyLineEndRowBulk(token);
+  });
+
+  lineEndApplyMessageBtn.addEventListener('click', function() {
+    if (!lineEndModel) return;
+    const token = lineEndBulkMessage.value;
+    HL7LineEnd.applyAllMessageEndings(lineEndModel, token);
+    syncMountedSelects('select.lineend-msg-select', token);
+
+    const count = lineEndModel.messageCount.toLocaleString();
+    if (token === 'NONE') {
+      setLineEndStatus('Removed the end-of-message terminator from all ' + count + ' messages.');
+    } else {
+      setLineEndStatus('Set the end-of-message terminator to ' + token
+        + ' on all ' + count + ' messages.');
+    }
+  });
+
+  lineEndApplyLastSegmentBtn.addEventListener('click', function() {
+    if (!lineEndModel) return;
+    const token = lineEndBulkLastSegment.value;
+    if (!token) {
+      setLineEndStatus('Choose CR, LF, or CRLF first.', true);
+      return;
+    }
+
+    const result = HL7LineEnd.applyAllLastSegmentEndings(lineEndModel, token);
+    syncMountedRowSelects(result.targets, token);
+    lineEndMixIsIntended = result.targets.length > 0;
+
+    // The operation clears any appended end-of-message terminator, so the
+    // per-message dropdowns and the toolbar control both have to follow it
+    // back to None or they would claim bytes that are no longer there.
+    if (result.cleared > 0) {
+      syncMountedSelects('select.lineend-msg-select', 'NONE');
+      lineEndBulkMessage.value = 'NONE';
+    }
+    refreshLineEndSummary();
+
+    const count = result.targets.length.toLocaleString();
+    setLineEndStatus('Replaced the last segment ending with ' + token + ' on '
+      + count + ' message' + (result.targets.length === 1 ? '' : 's')
+      + ' (' + result.changed.toLocaleString() + ' changed).'
+      + (result.cleared > 0
+        ? ' Cleared the appended end-of-message terminator on '
+          + result.cleared.toLocaleString() + ' of them.'
+        : ''));
+  });
+
+  lineEndNormalizeBtn.addEventListener('click', function() {
+    if (!lineEndModel || !lineEndModel.analysis.majority) return;
+    const token = lineEndModel.analysis.majority;
+    lineEndBulkSegment.value = token;
+    applyLineEndRowBulk(token);
+  });
+
+  lineEndDownloadBtn.addEventListener('click', function() {
+    if (!lineEndModel) return;
+    downloadText(HL7LineEnd.serialize(lineEndModel), lineEndFilename());
+  });
+
+  // One delegated listener for every dropdown on the page. Per-select
+  // listeners would be thousands of closures on a large file.
+  lineEndRows.addEventListener('change', function(e) {
+    if (!lineEndModel) return;
+
+    const select = e.target;
+    if (select.classList.contains('lineend-row-select')) {
+      const block = lineEndModel.messages[Number(select.dataset.msg)];
+      if (!block) return;
+      const row = block.rows[Number(select.dataset.row)];
+      if (!row) return;
+      row.ending = HL7LineEnd.decodeEnding(select.value);
+    } else if (select.classList.contains('lineend-msg-select')) {
+      const block = lineEndModel.messages[Number(select.dataset.msg)];
+      if (!block) return;
+      block.msgEnding = HL7LineEnd.decodeEnding(select.value);
+      return;
+    } else {
+      return;
+    }
+
+    refreshLineEndSummary();
+  });
+
   /**
    * Copy text without leaving the page. Falls back to execCommand for
    * contexts where the async clipboard API is unavailable.
@@ -1007,6 +1439,9 @@
   // Initialize the compare page
   compareShowUnflagged.checked = localStorage.getItem('hl7viewer_compareShowUnflagged') === 'true';
   refreshCompareStatuses();
+
+  // Initialize the Line End page
+  setUpLineEndDrop();
 
   // Initialize page mode
   setPageMode('viewer');
