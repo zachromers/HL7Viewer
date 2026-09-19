@@ -1,0 +1,553 @@
+/* HL7 Viewer - Line End Utility Styles */
+
+.lineend-panel {
+  display: none;
+  padding: 20px;
+  min-height: calc(100vh - 150px);
+}
+
+.lineend-panel.active {
+  display: block;
+}
+
+/* ========================================
+   INTRO
+   ======================================== */
+
+.lineend-intro {
+  margin-bottom: 20px;
+}
+
+.lineend-intro h2 {
+  font-size: 20px;
+  color: #4fc1ff;
+  margin-bottom: 8px;
+}
+
+.lineend-intro p {
+  font-size: 13px;
+  color: #999999;
+  max-width: 900px;
+  line-height: 1.6;
+}
+
+.lineend-caveat {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background-color: rgba(220, 220, 170, 0.08);
+  border-left: 3px solid #dcdcaa;
+  border-radius: 0 4px 4px 0;
+}
+
+/* ========================================
+   INPUT PANE
+   ======================================== */
+
+.lineend-input {
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.lineend-input.drag-over {
+  border-color: #0e639c;
+  background-color: rgba(14, 99, 156, 0.12);
+}
+
+.lineend-input-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.lineend-input-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4fc1ff;
+}
+
+.lineend-status {
+  font-size: 12px;
+  color: #999999;
+  text-align: right;
+}
+
+.lineend-status.error {
+  color: #f48771;
+}
+
+.lineend-textarea {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  padding: 10px;
+  background-color: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+
+.lineend-textarea:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+.lineend-textarea::placeholder {
+  color: #6a6a6a;
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+}
+
+.lineend-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lineend-file-input {
+  display: none;
+}
+
+.lineend-file-label {
+  cursor: pointer;
+}
+
+.lineend-browse-btn,
+.lineend-clear-btn,
+.lineend-load-btn,
+.lineend-apply-btn,
+.lineend-banner-btn {
+  display: inline-block;
+  padding: 6px 12px;
+  font-size: 12px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  background-color: #333333;
+  color: #d4d4d4;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.2s ease;
+}
+
+.lineend-browse-btn:hover,
+.lineend-clear-btn:hover,
+.lineend-load-btn:hover,
+.lineend-apply-btn:hover,
+.lineend-banner-btn:hover {
+  background-color: #3c3c3c;
+}
+
+/* ========================================
+   MIXED-ENDINGS BANNER
+   ======================================== */
+
+.lineend-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #dcdcaa;
+  background-color: rgba(220, 220, 170, 0.08);
+  border-left: 3px solid #dcdcaa;
+  border-radius: 0 4px 4px 0;
+}
+
+.lineend-banner.warn {
+  color: #f48771;
+  background-color: rgba(244, 135, 113, 0.08);
+  border-left-color: #f48771;
+}
+
+.lineend-banner[hidden] {
+  display: none;
+}
+
+/* ========================================
+   BULK TOOLBAR
+   ======================================== */
+
+.lineend-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  transition: opacity 0.2s ease;
+}
+
+.lineend-toolbar[hidden] {
+  display: none;
+}
+
+/* Set while the textarea has been edited but not reloaded, so the controls
+   visibly no longer describe what is on screen. */
+.lineend-toolbar.stale {
+  opacity: 0.55;
+}
+
+.lineend-bulk {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lineend-bulk label {
+  font-size: 12px;
+  color: #cccccc;
+}
+
+.lineend-summary {
+  font-size: 12px;
+  color: #999999;
+}
+
+.lineend-download-btn {
+  margin-left: auto;
+  padding: 10px 22px;
+  font-size: 14px;
+  font-weight: 600;
+  background-color: #0e639c;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background-color 0.2s ease;
+}
+
+.lineend-download-btn:hover {
+  background-color: #1177bb;
+}
+
+.lineend-download-btn:disabled {
+  background-color: #3c3c3c;
+  color: #777777;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   MESSAGE BLOCKS
+   ======================================== */
+
+.lineend-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.lineend-message {
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 10px 14px 12px;
+  /* Skips layout and paint for off-screen blocks, which keeps the page
+     responsive after many Load More clicks. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
+.lineend-message-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.lineend-message-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4fc1ff;
+}
+
+.lineend-message-meta,
+.lineend-message-note {
+  font-size: 12px;
+  color: #999999;
+}
+
+.lineend-message-end {
+  margin-left: auto;
+  font-size: 12px;
+  color: #cccccc;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* ========================================
+   SEGMENT ROWS
+   ======================================== */
+
+/* Every row is its own grid, so the badge column has to be a fixed width
+   rather than auto -- otherwise it collapses on rows without a badge and the
+   dropdowns stop lining up with each other down the page. */
+.lineend-row {
+  display: grid;
+  /* The last column has to fit "(none — end of file)", the option offered on a
+     final line that arrived without a terminator. */
+  grid-template-columns: 48px 1fr 100px 158px;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0;
+}
+
+.lineend-row-num {
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 11px;
+  color: #6a6a6a;
+  text-align: right;
+  user-select: none;
+}
+
+/* Deliberately one flat color with no per-token spans and no tooltips: this
+   page is about terminators, not field semantics. 'pre' rather than 'pre-wrap'
+   so trailing spaces stay visible and long segments scroll instead of wrap. */
+.lineend-row-text {
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #d4d4d4;
+  white-space: pre;
+  overflow-x: auto;
+  min-height: 1.6em;
+}
+
+.lineend-row.is-blank .lineend-row-text,
+.lineend-row.is-junk .lineend-row-text {
+  color: #8a8a8a;
+}
+
+.lineend-row-badge {
+  grid-column: 3;
+  justify-self: end;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #999999;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+/* Pinned to the last column so a missing badge cannot shift it. */
+.lineend-row-select {
+  grid-column: 4;
+  width: 100%;
+}
+
+.lineend-row-select,
+.lineend-msg-select {
+  padding: 3px 6px;
+  font-size: 12px;
+  font-family: inherit;
+  background-color: #3c3c3c;
+  color: #d4d4d4;
+  border: 1px solid #3c3c3c;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.lineend-row-select:focus,
+.lineend-msg-select:focus {
+  outline: none;
+  border-color: #0e639c;
+}
+
+/* ========================================
+   EMPTY STATE
+   ======================================== */
+
+.lineend-no-content {
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 30px 20px;
+  text-align: center;
+  color: #cccccc;
+  font-size: 14px;
+}
+
+.lineend-hint {
+  font-size: 12px;
+  color: #999999;
+  margin-top: 8px;
+}
+
+/* ========================================
+   LIGHT THEME
+   ======================================== */
+
+@media (prefers-color-scheme: light) {
+  .lineend-intro h2,
+  .lineend-input-title,
+  .lineend-message-title {
+    color: #0066cc;
+  }
+
+  .lineend-intro p,
+  .lineend-hint,
+  .lineend-status,
+  .lineend-summary,
+  .lineend-message-meta,
+  .lineend-message-note,
+  .lineend-row-badge {
+    color: #666666;
+  }
+
+  .lineend-input,
+  .lineend-toolbar,
+  .lineend-message,
+  .lineend-no-content {
+    background-color: #f8f8f8;
+    border-color: #e0e0e0;
+  }
+
+  .lineend-no-content {
+    color: #555555;
+  }
+
+  .lineend-input.drag-over {
+    border-color: #0066cc;
+    background-color: rgba(0, 102, 204, 0.06);
+  }
+
+  .lineend-textarea {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .lineend-textarea:focus {
+    border-color: #0066cc;
+  }
+
+  .lineend-textarea::placeholder {
+    color: #999999;
+  }
+
+  .lineend-browse-btn,
+  .lineend-clear-btn,
+  .lineend-load-btn,
+  .lineend-apply-btn,
+  .lineend-banner-btn {
+    background-color: #e8e8e8;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .lineend-browse-btn:hover,
+  .lineend-clear-btn:hover,
+  .lineend-load-btn:hover,
+  .lineend-apply-btn:hover,
+  .lineend-banner-btn:hover {
+    background-color: #d8d8d8;
+  }
+
+  .lineend-download-btn {
+    background-color: #0066cc;
+  }
+
+  .lineend-download-btn:hover {
+    background-color: #0077dd;
+  }
+
+  .lineend-download-btn:disabled {
+    background-color: #d0d0d0;
+    color: #888888;
+  }
+
+  .lineend-caveat,
+  .lineend-banner {
+    color: #7a5c00;
+    background-color: rgba(180, 130, 0, 0.08);
+    border-left-color: #b48200;
+  }
+
+  .lineend-banner.warn {
+    color: #c62828;
+    background-color: rgba(200, 40, 20, 0.06);
+    border-left-color: #c62828;
+  }
+
+  .lineend-bulk label,
+  .lineend-message-end {
+    color: #333333;
+  }
+
+  .lineend-message-header {
+    border-bottom-color: #e0e0e0;
+  }
+
+  .lineend-row-text {
+    color: #333333;
+  }
+
+  .lineend-row.is-blank .lineend-row-text,
+  .lineend-row.is-junk .lineend-row-text {
+    color: #888888;
+  }
+
+  .lineend-row-num {
+    color: #999999;
+  }
+
+  .lineend-row-select,
+  .lineend-msg-select {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .lineend-row-select:focus,
+  .lineend-msg-select:focus {
+    border-color: #0066cc;
+  }
+}
+
+/* ========================================
+   RESPONSIVE
+   ======================================== */
+
+/* The column count stays the same on narrow screens -- the dropdowns have to
+   keep lining up. Only the fixed columns shrink; the segment text column
+   absorbs the loss and scrolls. */
+@media (max-width: 1100px) {
+  .lineend-row {
+    grid-template-columns: 32px 1fr 76px 150px;
+    gap: 6px;
+  }
+
+  .lineend-row-text {
+    font-size: 12px;
+  }
+
+  .lineend-download-btn {
+    margin-left: 0;
+  }
+}
