@@ -1,0 +1,831 @@
+/* ========================================
+   JSON / FHIR FIELD STATISTICS PAGE
+   ======================================== */
+
+/* The Statistics page holds two views. Only one is ever visible: HL7 content
+   keeps the field-reference and filter UI, JSON content gets this one. */
+.json-stats-view {
+  display: none;
+}
+
+.stats-panel.json-mode .json-stats-view {
+  display: block;
+}
+
+.stats-panel.json-mode .stats-no-data-message,
+.stats-panel.json-mode .stats-input-section,
+.stats-panel.json-mode .stats-results {
+  display: none;
+}
+
+/* Prompt shown until a field has been picked from the viewer */
+.jstats-prompt {
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 40px 28px;
+  text-align: center;
+}
+
+.jstats-prompt h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4fc1ff;
+  margin-bottom: 14px;
+}
+
+.jstats-prompt p {
+  color: #b0b0b0;
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 720px;
+  margin: 0 auto 10px;
+}
+
+.jstats-prompt-hint {
+  color: #888888 !important;
+  font-size: 13px !important;
+}
+
+.jstats-prompt code,
+.jstats-scope code,
+.jstats-path-hint code,
+.jstats-insight-note code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  background-color: #1e1e1e;
+  border: 1px solid #3c3c3c;
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 0.92em;
+  color: #ce9178;
+}
+
+/* ---------- Header ---------- */
+
+.jstats-header {
+  margin-bottom: 24px;
+}
+
+.jstats-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.jstats-title-row h2 {
+  font-size: 20px;
+  font-weight: 600;
+  color: #4fc1ff;
+}
+
+.jstats-title-row h2 code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #dcdcaa;
+}
+
+.jstats-back-btn {
+  padding: 8px 14px;
+  font-size: 13px;
+  font-family: inherit;
+  background-color: #0e639c;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  white-space: nowrap;
+}
+
+.jstats-back-btn:hover {
+  background-color: #1177bb;
+}
+
+/* ---------- Path bar with pinnable indices ---------- */
+
+.jstats-path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 10px 14px;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 6px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  line-height: 1.9;
+}
+
+.jstats-path-label {
+  font-family: 'Segoe UI', 'Arial', sans-serif;
+  color: #999999;
+  margin-right: 8px;
+}
+
+.jstats-path-root {
+  color: #4ec9b0;
+  font-weight: 600;
+}
+
+.jstats-path-key {
+  color: #9cdcfe;
+}
+
+.jstats-path-sep {
+  color: #666666;
+}
+
+.jstats-chip {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  border: 1px solid #5a5a5a;
+  background-color: #333333;
+  color: #cccccc;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.jstats-chip:hover {
+  border-color: #4fc1ff;
+  background-color: #094771;
+  color: #ffffff;
+}
+
+.jstats-chip-wild {
+  border-color: #4ec9b0;
+  background-color: rgba(78, 201, 176, 0.16);
+  color: #4ec9b0;
+  font-weight: 700;
+}
+
+.jstats-chip-anchor {
+  border-color: #dcdcaa;
+  background-color: rgba(220, 220, 170, 0.18);
+  color: #dcdcaa;
+  box-shadow: 0 0 0 1px rgba(220, 220, 170, 0.35);
+}
+
+.jstats-path-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #808080;
+  line-height: 1.6;
+}
+
+.jstats-scope {
+  margin-top: 10px;
+  font-size: 14px;
+  color: #cccccc;
+}
+
+.jstats-scope strong {
+  color: #4fc1ff;
+}
+
+.jstats-note {
+  margin: -16px 0 24px;
+  padding: 10px 14px;
+  background-color: rgba(220, 220, 170, 0.1);
+  border-left: 3px solid #dcdcaa;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #d0d0c0;
+}
+
+.jstats-empty {
+  padding: 24px;
+  text-align: center;
+  color: #999999;
+  font-size: 14px;
+}
+
+/* ---------- Value table ---------- */
+
+.jstats-table tbody tr {
+  cursor: pointer;
+}
+
+.jstats-h3-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: #808080;
+}
+
+.jstats-table th {
+  white-space: nowrap;
+}
+
+.jstats-value-cell {
+  max-width: 420px;
+}
+
+.jstats-value-text {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #ce9178;
+  word-break: break-word;
+}
+
+.jstats-value-emptyish .jstats-value-text {
+  color: #808080;
+  font-style: italic;
+}
+
+.jstats-value-extra {
+  margin-top: 4px;
+  font-size: 11px;
+  color: #808080;
+  word-break: break-all;
+}
+
+.jstats-table-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #808080;
+  line-height: 1.5;
+}
+
+.jstats-num {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.jstats-go {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.jstats-go-hint {
+  font-size: 11px;
+  color: #4fc1ff;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.jstats-table tbody tr:hover .jstats-go-hint,
+.jstats-table tbody tr:focus .jstats-go-hint {
+  opacity: 1;
+}
+
+.jstats-value-row-active {
+  background-color: rgba(79, 193, 255, 0.14) !important;
+  outline: 1px solid rgba(79, 193, 255, 0.45);
+}
+
+.jstats-value-row-active .jstats-go-hint {
+  opacity: 1;
+}
+
+/* ---------- Insight panels ---------- */
+
+.jstats-insights {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.jstats-insight {
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  padding: 16px 18px;
+}
+
+.jstats-insight h3 {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e0e0;
+  margin-bottom: 4px;
+}
+
+.jstats-insight-note {
+  font-size: 12px;
+  color: #888888;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.jstats-mini-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.jstats-mini-table th {
+  text-align: left;
+  padding: 5px 8px;
+  color: #999999;
+  font-weight: 600;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.jstats-mini-table th:not(:first-child),
+.jstats-mini-table td:not(:first-child) {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.jstats-mini-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid #2d2d2d;
+  color: #cccccc;
+  word-break: break-all;
+}
+
+.jstats-mini-table tr:last-child td {
+  border-bottom: none;
+}
+
+.jstats-mini-table code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #9cdcfe;
+  font-size: 11px;
+}
+
+.jstats-defs {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 14px;
+  font-size: 12px;
+}
+
+.jstats-defs dt {
+  color: #999999;
+}
+
+.jstats-defs dd {
+  color: #cccccc;
+  word-break: break-all;
+}
+
+.jstats-defs code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #ce9178;
+  font-size: 11px;
+}
+
+/* ---------- Drill-down: the records behind one value ---------- */
+
+.jstats-drill:empty {
+  display: none;
+}
+
+.jstats-drill-inner {
+  margin-top: 24px;
+  background-color: #252526;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.jstats-drill-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  background-color: #2d2d30;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.jstats-drill-header h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.jstats-drill-value {
+  font-family: 'Consolas', 'Monaco', monospace;
+  color: #ce9178;
+}
+
+.jstats-drill-count {
+  font-size: 12px;
+  color: #999999;
+}
+
+.jstats-drill-close {
+  margin-left: auto;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  background-color: transparent;
+  border: 1px solid #5a5a5a;
+  border-radius: 4px;
+  color: #cccccc;
+  cursor: pointer;
+}
+
+.jstats-drill-close:hover {
+  border-color: #f48771;
+  color: #f48771;
+}
+
+.jstats-record-list {
+  list-style: none;
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.jstats-record {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #2d2d2d;
+}
+
+.jstats-record:last-child {
+  border-bottom: none;
+}
+
+.jstats-record:hover {
+  background-color: #2a2d2e;
+}
+
+.jstats-record-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.jstats-record-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.jstats-record-title {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4ec9b0;
+}
+
+.jstats-record-pos {
+  font-size: 11px;
+  color: #808080;
+}
+
+.jstats-record-sub {
+  margin-top: 3px;
+  font-size: 13px;
+  color: #d4d4d4;
+}
+
+.jstats-record-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.jstats-record-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background-color: #333333;
+  border: 1px solid #454545;
+  color: #cccccc;
+}
+
+.jstats-chip-key {
+  color: #808080;
+  margin-right: 5px;
+}
+
+.jstats-record-path {
+  display: block;
+  margin-top: 7px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  color: #6a8a9a;
+  word-break: break-all;
+}
+
+.jstats-record-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.jstats-reveal-btn {
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  white-space: nowrap;
+  background-color: #0e639c;
+  border: none;
+  border-radius: 4px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.jstats-reveal-btn:hover {
+  background-color: #1177bb;
+}
+
+.jstats-reveal-secondary {
+  background-color: transparent;
+  border: 1px solid #5a5a5a;
+  color: #cccccc;
+}
+
+.jstats-reveal-secondary:hover {
+  background-color: #333333;
+  border-color: #4fc1ff;
+  color: #ffffff;
+}
+
+.jstats-more-btn {
+  display: block;
+  width: 100%;
+  padding: 11px;
+  font-size: 13px;
+  font-family: inherit;
+  background-color: #2d2d30;
+  border: none;
+  border-top: 1px solid #3c3c3c;
+  color: #4fc1ff;
+  cursor: pointer;
+}
+
+.jstats-more-btn:hover {
+  background-color: #37373d;
+}
+
+@media (max-width: 720px) {
+  .jstats-record {
+    flex-direction: column;
+  }
+
+  .jstats-record-actions {
+    flex-direction: row;
+  }
+}
+
+/* ========================================
+   LIGHT THEME
+   ======================================== */
+
+@media (prefers-color-scheme: light) {
+  .jstats-prompt {
+    background-color: #f8f8f8;
+    border-color: #e0e0e0;
+  }
+
+  .jstats-prompt h2,
+  .jstats-title-row h2 {
+    color: #0066cc;
+  }
+
+  .jstats-prompt p {
+    color: #555555;
+  }
+
+  .jstats-prompt-hint {
+    color: #777777 !important;
+  }
+
+  .jstats-prompt code,
+  .jstats-scope code,
+  .jstats-path-hint code,
+  .jstats-insight-note code {
+    background-color: #ffffff;
+    border-color: #dddddd;
+    color: #a31515;
+  }
+
+  .jstats-title-row h2 code {
+    color: #795e26;
+  }
+
+  .jstats-path {
+    background-color: #f8f8f8;
+    border-color: #e0e0e0;
+  }
+
+  .jstats-path-label {
+    color: #666666;
+  }
+
+  .jstats-path-root {
+    color: #008080;
+  }
+
+  .jstats-path-key {
+    color: #0451a5;
+  }
+
+  .jstats-path-sep {
+    color: #aaaaaa;
+  }
+
+  .jstats-chip {
+    background-color: #ffffff;
+    border-color: #cccccc;
+    color: #333333;
+  }
+
+  .jstats-chip:hover {
+    background-color: #0066cc;
+    border-color: #0066cc;
+    color: #ffffff;
+  }
+
+  .jstats-chip-wild {
+    border-color: #008080;
+    background-color: rgba(0, 128, 128, 0.1);
+    color: #006666;
+  }
+
+  .jstats-chip-anchor {
+    border-color: #a37c00;
+    background-color: rgba(163, 124, 0, 0.12);
+    color: #7a5c00;
+    box-shadow: 0 0 0 1px rgba(163, 124, 0, 0.3);
+  }
+
+  .jstats-path-hint {
+    color: #777777;
+  }
+
+  .jstats-scope {
+    color: #444444;
+  }
+
+  .jstats-scope strong {
+    color: #0066cc;
+  }
+
+  .jstats-note {
+    background-color: rgba(163, 124, 0, 0.08);
+    border-left-color: #a37c00;
+    color: #5a4600;
+  }
+
+  .jstats-empty {
+    color: #777777;
+  }
+
+  .jstats-value-text {
+    color: #a31515;
+  }
+
+  .jstats-value-emptyish .jstats-value-text {
+    color: #999999;
+  }
+
+  .jstats-value-extra {
+    color: #888888;
+  }
+
+  .jstats-go-hint {
+    color: #0066cc;
+  }
+
+  .jstats-value-row-active {
+    background-color: rgba(0, 102, 204, 0.09) !important;
+    outline-color: rgba(0, 102, 204, 0.35);
+  }
+
+  .jstats-insight {
+    background-color: #f8f8f8;
+    border-color: #e0e0e0;
+  }
+
+  .jstats-insight h3 {
+    color: #333333;
+  }
+
+  .jstats-insight-note {
+    color: #777777;
+  }
+
+  .jstats-h3-note,
+  .jstats-table-note {
+    color: #888888;
+  }
+
+  .jstats-mini-table th {
+    color: #666666;
+    border-bottom-color: #dddddd;
+  }
+
+  .jstats-mini-table td {
+    color: #444444;
+    border-bottom-color: #eeeeee;
+  }
+
+  .jstats-mini-table code {
+    color: #0451a5;
+  }
+
+  .jstats-defs dt {
+    color: #666666;
+  }
+
+  .jstats-defs dd {
+    color: #444444;
+  }
+
+  .jstats-defs code {
+    color: #a31515;
+  }
+
+  .jstats-drill-inner {
+    background-color: #ffffff;
+    border-color: #e0e0e0;
+  }
+
+  .jstats-drill-header {
+    background-color: #f1f1f1;
+    border-bottom-color: #e0e0e0;
+  }
+
+  .jstats-drill-header h3 {
+    color: #333333;
+  }
+
+  .jstats-drill-value {
+    color: #a31515;
+  }
+
+  .jstats-drill-count {
+    color: #777777;
+  }
+
+  .jstats-drill-close {
+    border-color: #cccccc;
+    color: #555555;
+  }
+
+  .jstats-drill-close:hover {
+    border-color: #cc3300;
+    color: #cc3300;
+  }
+
+  .jstats-record {
+    border-bottom-color: #eeeeee;
+  }
+
+  .jstats-record:hover {
+    background-color: #f5f5f5;
+  }
+
+  .jstats-record-title {
+    color: #008080;
+  }
+
+  .jstats-record-pos {
+    color: #999999;
+  }
+
+  .jstats-record-sub {
+    color: #333333;
+  }
+
+  .jstats-record-chip {
+    background-color: #f1f1f1;
+    border-color: #dddddd;
+    color: #444444;
+  }
+
+  .jstats-chip-key {
+    color: #888888;
+  }
+
+  .jstats-record-path {
+    color: #6a8a9a;
+  }
+
+  .jstats-reveal-secondary {
+    border-color: #cccccc;
+    color: #444444;
+  }
+
+  .jstats-reveal-secondary:hover {
+    background-color: #f1f1f1;
+    border-color: #0066cc;
+    color: #0066cc;
+  }
+
+  .jstats-more-btn {
+    background-color: #f1f1f1;
+    border-top-color: #e0e0e0;
+    color: #0066cc;
+  }
+
+  .jstats-more-btn:hover {
+    background-color: #e8e8e8;
+  }
+}

@@ -886,6 +886,22 @@
   outline: 1px solid #ff9800;
 }
 
+/* Applied by revealJSONPath() when the statistics page jumps back to a
+   field or record, then removed after a few seconds. */
+.json-path-revealed {
+  background-color: rgba(79, 193, 255, 0.28) !important;
+  outline: 2px solid #4fc1ff;
+  outline-offset: 1px;
+  border-radius: 3px;
+  animation: json-path-reveal-pulse 1.2s ease-out 2;
+}
+
+@keyframes json-path-reveal-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(79, 193, 255, 0.55); }
+  70%  { box-shadow: 0 0 0 10px rgba(79, 193, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(79, 193, 255, 0); }
+}
+
 .json-search-input {
   padding: 5px 10px;
   font-size: 13px;
@@ -1058,6 +1074,12 @@
 .json-context-menu-icon {
   margin-right: 10px;
   font-size: 14px;
+}
+
+.json-context-menu-separator {
+  height: 1px;
+  margin: 4px 0;
+  background-color: #454545;
 }
 
 /* Highlight elements with paths on hover */

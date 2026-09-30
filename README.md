@@ -61,11 +61,77 @@ Both modes include:
 JSON content is auto-detected and rendered with:
 - Syntax highlighting (keys=blue, strings=orange, numbers=green, booleans=blue, null=italic).
 - Tree View (collapsible) and Standard View (formatted) modes.
-- **Right-click context menu** to copy JSON paths in Python style (`root['key'][0]`) or Java style (`root.getJSONObject("key")`).
+- **Right-click context menu** to copy JSON paths in Python style (`root['key'][0]`), Java style (`root.getJSONObject("key")`), or PostgreSQL operator style (`key -> 0`), and to open **field statistics** for the clicked field.
 
-### Statistics & Filtering
+### JSON Field Statistics
 
-Switch to the **Statistics** page to analyze loaded HL7 data:
+Built for the case where one JSON blob holds many records of the same kind &mdash; a FHIR
+`Bundle` of two hundred `ServiceRequest`s, say &mdash; and you want to know how those records
+populate one field, then find the specific record you care about.
+
+Right-click any key or value in the JSON viewer and choose **View field statistics**. The
+Statistics page switches to a JSON-specific view analyzing that field across every record.
+
+**How the scope is worked out.** The path you right-click is concrete: clicking the code in the
+fourth order gives `root['entry'][3]['resource']['code']['coding'][0]['code']`, which names one
+value in one order. To say anything about the other orders, every array index in that path is
+turned into a wildcard:
+
+```
+root['entry'][*]['resource']['code']['coding'][*]['code']
+```
+
+The **first `[*]` is the record collection** &mdash; its elements are the things being compared,
+and everything after it is the field being measured. So the example above compares every entry in
+the bundle, and within each one reads every `coding`. A record with two codings contributes two
+occurrences, which is why occurrences and records are counted separately throughout.
+
+The path is shown as a row of clickable chips. Click any index to **pin** it back to that one
+element, or release it to `[*]` to compare across all of them. Pinning the outer index moves the
+record collection inward &mdash; pin `entry` and you are instead comparing the codings within that
+single order. The chip marking the current collection is highlighted.
+
+**What is reported**
+
+- Summary cards: records in scope, records carrying a value (with percentage), records missing the
+  field entirely, total occurrences, and distinct values.
+- Pie chart of the value distribution, weighted by occurrence (top 15 values).
+- Value table: each distinct value with its occurrence count, the number of records holding it, and
+  what share of records that is. Coded values also show the `system` and `display` sitting beside
+  them in their `Coding` element, since a bare code like `ADMS` means little on its own.
+- **Values per record** &mdash; how often the field repeats within a single record, which is how you
+  spot a field that is usually single but occasionally repeats.
+- **Value types** &mdash; shown when more than one JSON type appears, which normally points at
+  inconsistent source data.
+- **Coding systems** &mdash; which terminologies the values are drawn from.
+- **Reference targets** &mdash; for values shaped like `ResourceType/id`, a breakdown by resource type.
+- **Date range** &mdash; earliest and latest, for values matching a FHIR `date`, `dateTime`, or
+  `instant`. Partial dates (`2026`, `2026-04`) are widened to the start of their period for ordering.
+- **Numeric summary** &mdash; min, max, and mean.
+- **Resource types in scope** &mdash; what the records being compared actually are, which matters in a
+  mixed `Bundle`.
+
+A field whose every occurrence is unique is called out as identifying records rather than grouping
+them. Values are analyzed across the whole document, not just the batch currently rendered in the
+viewer.
+
+**Finding a specific record.** Click any row in the value table to list the records holding that
+value. Each is labelled with its `resourceType/id`, its position in the collection, a description
+drawn from `code`, `type`, or `category`, and chips for `status`, `intent`, date, subject, and
+identifier &mdash; enough to recognise the admit order among two hundred lab orders. Two buttons
+jump back into the viewer: **View field** goes to that record's copy of the analyzed field, **View
+record** goes to the record itself. Either way the JSON tree expands down to the target, scrolls to
+it, and highlights it. Further batches are loaded automatically if the record sits past the end of
+what the viewer has rendered.
+
+The value table lists the 1,000 most common values; anything beyond that is summarized in a note.
+Object-valued fields are rendered by meaning rather than as raw JSON &mdash; a `CodeableConcept`
+reads as its text and code, a `Reference` as its target and display, a `Quantity` as its value and
+unit, a `Period` as its bounds.
+
+### HL7 Statistics & Filtering
+
+Switch to the **Statistics** page with HL7 data loaded to analyze it:
 
 **Filters**
 - Create one or more filters using the format: `FIELD OPERATOR VALUE`
@@ -158,7 +224,7 @@ Each definition includes field names, component names, and subcomponent names �
 | Shortcut | Action |
 |----------|--------|
 | `Ctrl+Enter` / `Cmd+Enter` | Load content from the text area |
-| `Escape` | Close any open modal |
+| `Escape` | Close any open modal, or the JSON context menu |
 | Double-click input area | Toggle input area visibility after content is loaded |
 
 ## Settings
@@ -183,15 +249,19 @@ HL7Viewer/
     ├── index.html         # Main application page
     ├── HL7Favicon.png     # Favicon
     ├── css/
-    │   ├── main.css       # Layout, theming, and global styles
-    │   ├── viewer.css     # Viewer-specific styles and syntax colors
-    │   └── compare.css    # Compare page styles
+    │   ├── main.css        # Layout, theming, and global styles
+    │   ├── viewer.css      # Viewer-specific styles and syntax colors
+    │   ├── compare.css     # Compare page styles
+    │   ├── lineend.css     # Line End Utility styles
+    │   └── json-stats.css  # JSON field statistics page styles
     └── js/
-        ├── app.js         # Main application logic, rendering, and UI
-        ├── hl7-parser.js  # HL7/JSON parsing and content detection
-        ├── hl7-fields.js  # HL7 segment/field/component definitions
-        ├── stats.js       # Statistics, filtering, and chart generation
-        └── hl7-diff.js    # Message comparison engine and rendering
+        ├── app.js          # Main application logic, rendering, and UI
+        ├── hl7-parser.js   # HL7/JSON parsing, rendering, and path reveal
+        ├── hl7-fields.js   # HL7 segment/field/component definitions
+        ├── stats.js        # HL7 statistics, filtering, and chart generation
+        ├── json-stats.js   # JSON/FHIR field statistics engine and rendering
+        ├── hl7-diff.js     # Message comparison engine and rendering
+        └── hl7-lineend.js  # Line ending detection and conversion
 ```
 
 ## Tech Stack

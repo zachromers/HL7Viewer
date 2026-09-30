@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="css/viewer.css">
   <link rel="stylesheet" href="css/compare.css">
   <link rel="stylesheet" href="css/lineend.css">
+  <link rel="stylesheet" href="css/json-stats.css">
 </head>
 <body>
   <div class="app-container">
@@ -205,6 +206,22 @@
             <p class="stats-hint">Field examples: PID.5 (Patient Name), FT1.13 (Description), MSH.9.1 (Message Type)</p>
             <p class="stats-hint">Filter examples: PV1.2 = E (equals), PV1.2 != I (not equals), PV1.3 contains ER (contains), PID.5 exists</p>
           </div>
+        </div>
+
+        <!-- JSON / FHIR field statistics. Replaces the HL7 statistics UI
+             above whenever the loaded content is JSON. -->
+        <div class="json-stats-view" id="jsonStatsView">
+          <div class="jstats-prompt" id="jsonStatsPrompt">
+            <h2>JSON Field Statistics</h2>
+            <p>Right-click any field in the JSON viewer and choose
+               <strong>View field statistics</strong> to analyze that field across every
+               repeated record in the document.</p>
+            <p class="jstats-prompt-hint">For a FHIR <code>Bundle</code> of
+               <code>ServiceRequest</code>s, right-clicking <code>code</code> inside any one
+               order reports how all the orders populate that field &mdash; then lets you jump
+               straight back to the one you are looking for.</p>
+          </div>
+          <div id="jsonStatsResults"></div>
         </div>
       </div>
 
@@ -411,6 +428,7 @@
   <script src="js/hl7-fields.js"></script>
   <script src="js/hl7-parser.js"></script>
   <script src="js/stats.js"></script>
+  <script src="js/json-stats.js"></script>
   <script src="js/hl7-diff.js"></script>
   <script src="js/hl7-lineend.js"></script>
   <script src="js/app.js"></script>

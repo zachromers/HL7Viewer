@@ -81,6 +81,16 @@
   const statsGenerateBtn = document.getElementById('statsGenerateBtn');
   const statsResults = document.getElementById('statsResults');
 
+  // DOM Elements - JSON Statistics
+  const jsonStatsView = document.getElementById('jsonStatsView');
+  const jsonStatsPrompt = document.getElementById('jsonStatsPrompt');
+  const jsonStatsResults = document.getElementById('jsonStatsResults');
+
+  // The field picked via the JSON viewer's "View field statistics" menu item:
+  // the concrete path that was right-clicked, plus the segment list currently
+  // being analysed (indices individually pinned or wildcarded).
+  let jsonStatsState = null;
+
   // Filter state
   let filterCounter = 1;
 
@@ -188,8 +198,27 @@
     }
 
     if (mode === 'statistics') {
+      updateStatsMode();
+    }
+  }
+
+  /**
+   * The Statistics page carries two separate views. HL7 content gets the field
+   * reference + filter UI; JSON content gets the path-driven record analysis,
+   * which has no equivalent notion of a filter expression.
+   */
+  function updateStatsMode() {
+    const jsonMode = isJSONLoaded();
+    statsPanel.classList.toggle('json-mode', jsonMode);
+    if (jsonMode) {
+      renderJSONStats();
+    } else {
       updateStatsNoContentMessage();
     }
+  }
+
+  function isJSONLoaded() {
+    return !!currentContent && HL7Parser.detectContentType(currentContent) === 'json';
   }
 
   /**
@@ -327,6 +356,8 @@
     }
 
     currentContent = content;
+    // A path from the previous document need not exist in this one.
+    jsonStatsState = null;
     if (jsonSearchInput) jsonSearchInput.value = '';
     renderCurrentContent();
 
@@ -334,7 +365,7 @@
     inputArea.classList.add('hidden');
 
     // Update stats panel state
-    updateStatsNoContentMessage();
+    updateStatsMode();
   }
 
   /**
@@ -355,6 +386,7 @@
     }
 
     currentContent = null;
+    jsonStatsState = null;
     textInput.value = '';
     fileInput.value = '';
 
@@ -378,7 +410,7 @@
     // Reset stats panel
     resetFilters();
     statsFieldInput.value = '';
-    updateStatsNoContentMessage();
+    updateStatsMode();
   }
 
   // ========================================
@@ -797,6 +829,87 @@
       statsGenerateBtn.click();
     }
   });
+
+  // ========================================
+  // JSON / FHIR FIELD STATISTICS
+  // ========================================
+
+  /**
+   * Right-clicking a JSON field and choosing "View field statistics" lands
+   * here with the concrete path of the element that was clicked.
+   */
+  HL7Parser.setFieldStatisticsHandler(function(path) {
+    const segments = JSONStats.parsePath(path);
+    if (!segments) {
+      alert('That element has no JSON path that can be analyzed. Try right-clicking a key or value inside the document.');
+      return;
+    }
+
+    jsonStatsState = { sourcePath: path, segments: segments };
+
+    const radio = document.querySelector('input[name="pageMode"][value="statistics"]');
+    if (radio) radio.checked = true;
+    setPageMode('statistics');
+  });
+
+  /**
+   * Render (or re-render) the JSON statistics view from jsonStatsState.
+   */
+  function renderJSONStats() {
+    if (!jsonStatsView) return;
+
+    if (!jsonStatsState) {
+      jsonStatsPrompt.style.display = '';
+      jsonStatsResults.innerHTML = '';
+      return;
+    }
+
+    let parsed;
+    try {
+      parsed = JSON.parse(currentContent.trim());
+    } catch (err) {
+      jsonStatsPrompt.style.display = 'none';
+      jsonStatsResults.innerHTML = '';
+      const error = document.createElement('div');
+      error.className = 'stats-error';
+      error.textContent = 'Could not parse the loaded content as JSON: ' + err.message;
+      jsonStatsResults.appendChild(error);
+      return;
+    }
+
+    jsonStatsPrompt.style.display = 'none';
+
+    const analysis = JSONStats.analyze(parsed, jsonStatsState.segments);
+    analysis.sourcePath = jsonStatsState.sourcePath;
+
+    JSONStats.render(jsonStatsResults, analysis, {
+      onReveal: revealPathInViewer,
+      onSegmentsChange: function(segments) {
+        jsonStatsState.segments = segments;
+        renderJSONStats();
+      }
+    });
+  }
+
+  /**
+   * Return to the viewer with a given JSON path scrolled into view, expanded,
+   * and highlighted — the round trip back from a statistic to the record it
+   * came from.
+   */
+  function revealPathInViewer(path) {
+    const radio = document.querySelector('input[name="pageMode"][value="viewer"]');
+    if (radio) radio.checked = true;
+    setPageMode('viewer');
+
+    // setPageMode un-hides the viewer synchronously, and scrollIntoView forces
+    // whatever layout it needs, so this runs inline. Deferring it to an
+    // animation frame would leave the jump at the mercy of the browser
+    // scheduling a frame at all.
+    const found = HL7Parser.revealJSONPath(viewerContainer, path);
+    if (!found) {
+      alert('Could not find that path in the viewer. It may belong to a document that has since been replaced.');
+    }
+  }
 
   // ========================================
   // COMPARE HANDLERS

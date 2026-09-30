@@ -1075,6 +1075,15 @@ const HL7Parser = (function() {
       const itemContainer = document.createElement('div');
       itemContainer.className = 'json-item';
 
+      // When the document is an array, every item sits at `[i]` in the
+      // document. Paths built below must carry that prefix, or a path copied
+      // out of item 3 would resolve against item 0's data.
+      const itemPath = isArray ? `[${i}]` : '';
+      if (itemPath) {
+        itemContainer.dataset.jsonPath = itemPath;
+        itemContainer.dataset.jsonValueType = getJSONValueType(items[i]);
+      }
+
       // Add item header for arrays
       if (isArray && items.length > 1) {
         const header = document.createElement('div');
@@ -1086,7 +1095,7 @@ const HL7Parser = (function() {
       const pre = document.createElement('pre');
       pre.className = 'json-content';
       // Use path-aware rendering for standard view
-      pre.appendChild(renderJSONWithPaths(items[i], ''));
+      pre.appendChild(renderJSONWithPaths(items[i], itemPath));
       itemContainer.appendChild(pre);
 
       container.appendChild(itemContainer);
@@ -1491,6 +1500,14 @@ const HL7Parser = (function() {
     return columnName + ' ' + parts.join(' ');
   }
 
+  // Called when "View field statistics" is chosen. Held at module scope so it
+  // survives setupJSONContextMenu() rebuilding the menu on every render.
+  let fieldStatisticsHandler = null;
+
+  function setFieldStatisticsHandler(fn) {
+    fieldStatisticsHandler = fn;
+  }
+
   /**
    * Setup custom context menu for JSON elements
    */
@@ -1517,6 +1534,11 @@ const HL7Parser = (function() {
       <div class="json-context-menu-item" data-action="copy-postgresql-path">
         <span class="json-context-menu-icon">&#128028;</span>
         Copy PostgreSQL path
+      </div>
+      <div class="json-context-menu-separator"></div>
+      <div class="json-context-menu-item" data-action="field-statistics">
+        <span class="json-context-menu-icon">&#128202;</span>
+        View field statistics
       </div>
     `;
     document.body.appendChild(contextMenu);
@@ -1565,6 +1587,10 @@ const HL7Parser = (function() {
           const pgPath = convertToPostgresqlPath(currentPath);
           copyToClipboard(pgPath);
           showCopyNotification('PostgreSQL path copied to clipboard!');
+        } else if (menuItem.dataset.action === 'field-statistics') {
+          if (fieldStatisticsHandler) {
+            fieldStatisticsHandler(currentPath, currentValueType);
+          }
         }
       }
       contextMenu.style.display = 'none';
@@ -1820,6 +1846,83 @@ const HL7Parser = (function() {
     }
   }
 
+  // ========================================
+  // JSON PATH REVEAL
+  // ========================================
+
+  // Both JSON views build the whole subtree for an item up front — the tree
+  // view merely hides it with display:none — so any path inside an item that
+  // has been rendered is already in the DOM and can be found by attribute.
+  // Only the top-level batching hides items entirely, which is why this may
+  // have to press "Load More" first.
+  function jsonPathSelector(path) {
+    return '[data-json-path="' + path.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"]';
+  }
+
+  function findJSONPathElement(container, path) {
+    try {
+      return container.querySelector(jsonPathSelector(path));
+    } catch (err) {
+      // A key holding characters that break the selector — fall back to a scan.
+      const all = container.querySelectorAll('[data-json-path]');
+      for (let i = 0; i < all.length; i++) {
+        if (all[i].dataset.jsonPath === path) return all[i];
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Scroll to, expand, and briefly highlight the element at a JSON path.
+   * Loads further batches as needed to reach it.
+   * @returns {boolean} whether the path was found
+   */
+  function revealJSONPath(container, path) {
+    if (!container || !path) return false;
+
+    let el = findJSONPathElement(container, path);
+
+    // Press "Load More" until the item holding this path is rendered. The
+    // button re-appends itself after each batch, so re-query it each pass.
+    let guard = 0;
+    while (!el && guard++ < 1000) {
+      const loadMore = container.querySelector('.hl7-load-more');
+      if (!loadMore) break;
+      loadMore.click();
+      el = findJSONPathElement(container, path);
+    }
+
+    if (!el) return false;
+
+    // Open the node itself if it is a collapsed tree header, then every
+    // collapsed ancestor above it.
+    if (el.classList.contains('hl7-tree-header') && el.classList.contains('collapsed')) {
+      expandHeader(el);
+    }
+    let node = el.parentElement;
+    while (node && node !== container) {
+      if (node.classList && node.classList.contains('hl7-tree-content')) {
+        const header = node.previousElementSibling;
+        if (header && header.classList.contains('hl7-tree-header') &&
+            header.classList.contains('collapsed')) {
+          expandHeader(header);
+        }
+      }
+      node = node.parentElement;
+    }
+
+    const previous = container.querySelectorAll('.json-path-revealed');
+    previous.forEach(function(p) { p.classList.remove('json-path-revealed'); });
+
+    el.classList.add('json-path-revealed');
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    setTimeout(function() {
+      el.classList.remove('json-path-revealed');
+    }, 4000);
+
+    return true;
+  }
+
   // Public API
   return {
     detectContentType: detectContentType,
@@ -1829,7 +1932,9 @@ const HL7Parser = (function() {
     handleTreeClick: handleTreeClick,
     performJSONSearch: performJSONSearch,
     navigateJSONSearch: navigateJSONSearch,
-    clearJSONSearch: clearJSONSearch
+    clearJSONSearch: clearJSONSearch,
+    setFieldStatisticsHandler: setFieldStatisticsHandler,
+    revealJSONPath: revealJSONPath
   };
 
 })();

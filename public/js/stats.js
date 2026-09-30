@@ -1230,6 +1230,7 @@ const HL7Stats = (function() {
     extractFieldValues: extractFieldValues,
     generateStatistics: generateStatistics,
     renderStatistics: renderStatistics,
+    createPieChart: createPieChart,
     runStatistics: runStatistics
   };
 
